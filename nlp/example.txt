@@ -1,0 +1,15 @@
+"Navigate to the blue object." -- "Navigate to the blue object.",  Latent Similarity: 1.00
+"Navigate to the blue object." -- "There is a blue object somewhere nearby. Find it.",  Latent Similarity: 0.96
+"Navigate to the blue object." -- "Enter a flocking formation with the other robots.",  Latent Similarity: 0.84
+"Navigate to the blue object." -- "You are agent 3. Swap positions with agent 5.",  Latent Similarity: 0.85
+"Navigate to the blue object." -- "You are agent 5. Swap positions with agent 3.",  Latent Similarity: 0.85
+"There is a blue object somewhere nearby. Find it." -- "There is a blue object somewhere nearby. Find it.",  Latent Similarity: 1.00
+"There is a blue object somewhere nearby. Find it." -- "Enter a flocking formation with the other robots.",  Latent Similarity: 0.82
+"There is a blue object somewhere nearby. Find it." -- "You are agent 3. Swap positions with agent 5.",  Latent Similarity: 0.82
+"There is a blue object somewhere nearby. Find it." -- "You are agent 5. Swap positions with agent 3.",  Latent Similarity: 0.82
+"Enter a flocking formation with the other robots." -- "Enter a flocking formation with the other robots.",  Latent Similarity: 1.00
+"Enter a flocking formation with the other robots." -- "You are agent 3. Swap positions with agent 5.",  Latent Similarity: 0.87
+"Enter a flocking formation with the other robots." -- "You are agent 5. Swap positions with agent 3.",  Latent Similarity: 0.87
+"You are agent 3. Swap positions with agent 5." -- "You are agent 3. Swap positions with agent 5.",  Latent Similarity: 1.00
+"You are agent 3. Swap positions with agent 5." -- "You are agent 5. Swap positions with agent 3.",  Latent Similarity: 1.00
+"You are agent 5. Swap positions with agent 3." -- "You are agent 5. Swap positions with agent 3.",  Latent Similarity: 1.00

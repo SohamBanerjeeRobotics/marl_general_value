@@ -1,0 +1,207 @@
+from typing import Any, Dict
+import jax
+import jax.numpy as jnp
+from jax import random
+import equinox as eqx
+from equinox import nn
+import numpy as np
+import math
+
+def leaky_relu(x, key=None):
+    return jax.nn.leaky_relu(x)
+
+def default_init(key, linear, scale=1.0, zero_bias=False, fixed_bias=None):
+    lim = math.sqrt(scale / linear.in_features)
+    linear = eqx.tree_at(lambda l: l.weight, linear, jax.random.uniform(key, linear.weight.shape, minval=-lim, maxval=lim))
+    if zero_bias:
+        linear = eqx.tree_at(lambda l: l.bias, linear, jnp.zeros_like(linear.bias))
+    elif fixed_bias is not None:
+        linear = eqx.tree_at(lambda l: l.bias, linear, jnp.full_like(linear.bias, fixed_bias))
+    return linear
+
+def final_linear(key, input_size, output_size, scale=0.01):
+    #linear = ortho_linear(key, input_size, output_size, scale=scale)
+    linear = nn.Linear(input_size, output_size, key=key)
+    linear = default_init(key, linear, scale=scale, zero_bias=True)
+    #linear = eqx.tree_at(lambda l: l.bias, linear, linear.bias * 0.0)
+    return linear
+
+class Block(eqx.Module):
+    net: eqx.Module
+    def __init__(self, input_size, output_size, dropout, key):
+        if dropout == 0.0:
+            self.net = RandomSequential([
+                nn.Linear(input_size, output_size, key=key), 
+                nn.LayerNorm(output_size, use_weight=False, use_bias=False),
+                leaky_relu,
+            ])
+        else:
+            self.net = RandomSequential([
+                nn.Linear(input_size, output_size, key=key), 
+                nn.LayerNorm(output_size, use_weight=False, use_bias=False),
+                nn.Dropout(dropout),
+                leaky_relu,
+            ])
+
+    def __call__(self, x, key=None):
+        return self.net(x, key=key)
+
+class RandomSequential(nn.Sequential):
+    def __call__(self, x, key=None):
+        return super().__call__(x, key=key)
+
+class QHead(eqx.Module):
+    post0: eqx.Module
+    post1: eqx.Module
+    value: nn.Linear
+    advantage: nn.Linear
+
+    def __init__(self, input_size, hidden_size, output_size, dropout, key):
+        keys = random.split(key, 3)
+
+        self.post0 = eqx.filter_vmap(Block(input_size, hidden_size, dropout, keys[0]))
+        self.post1 = eqx.filter_vmap(Block(hidden_size, hidden_size, dropout, keys[1]))
+        self.value = eqx.filter_vmap(final_linear(keys[2], input_size, 1, scale=0.01))
+        self.advantage = eqx.filter_vmap(final_linear(keys[3], input_size, output_size, scale=0.01))
+
+    def __call__(self, x, key):
+        T = x.shape[0]
+        net_keys = random.split(key, 2 * T)
+        x = self.post0(x, net_keys[:T])
+        x = self.post1(x, net_keys[T:2*T])
+        V = self.value(x) 
+        A = self.advantage(x)
+        # Dueling DQN
+        return V + (A - A.mean(axis=-1, keepdims=True))
+
+class QNetwork(eqx.Module):
+    """Single agent Q network"""
+    observation_size: int
+    action_size: int
+    hidden_size: int
+    mlp: nn.Sequential
+
+    def __init__(self, obs_size, action_size, key):
+        self.observation_size = obs_size#8 * num_agents
+        self.hidden_size = 256
+        self.action_size = action_size
+        keys = jax.random.split(key, 3)
+        self.mlp = nn.Sequential([
+            nn.Linear(self.observation_size + self.action_size, self.hidden_size, key=keys[0]),
+            nn.LayerNorm((self.hidden_size,)),
+            leaky_relu,
+            nn.Linear(self.hidden_size, self.hidden_size, key=keys[1]),
+            nn.LayerNorm((self.hidden_size,)),
+            leaky_relu,
+            #nn.Linear(self.hidden_size, 1, key=keys[2]),
+            final_linear(keys[2], self.hidden_size, 1, scale=0.01)
+        ])
+
+    def __call__(self, state, action, key=None):
+        x = jnp.concatenate([state, action], axis=-1)
+        values = self.mlp(x)
+        return values
+
+
+class Policy(eqx.Module):
+    """Single agent policy"""
+    observation_size: int
+    hidden_size: int
+    action_low: np.array
+    action_high: np.array
+    mlp: nn.Sequential
+
+    def __init__(self, obs_size, action_low, action_high, key):
+        keys = jax.random.split(key, 3)
+        self.observation_size = obs_size
+        self.action_low = action_low
+        self.action_high = action_high
+        self.hidden_size = 256
+        self.mlp = nn.Sequential([
+            nn.Linear(self.observation_size, self.hidden_size, key=keys[0]),
+            nn.LayerNorm((self.hidden_size,)),
+            leaky_relu,
+            nn.Linear(self.hidden_size, self.hidden_size, key=keys[1]),
+            nn.LayerNorm((self.hidden_size,)),
+            leaky_relu,
+            nn.Linear(self.hidden_size, self.action_low.size, key=keys[2]),
+        ])
+
+    def __call__(self, state, noise_scale, key):
+        x = self.mlp(state)
+        #mu, sigma = jnp.split(x, 2, axis=-1)
+        noise = noise_scale * jax.random.normal(key, shape=(self.action_low.size,))
+        unclamped_action = self.mlp(state) + noise * noise_scale
+        # Ensure in action space
+        scale = (self.action_high - self.action_low) / 2
+        shift = self.action_low + self.action_high
+        action = scale * jnp.tanh(unclamped_action) + shift
+        return action
+
+
+class EnsembleQNetwork(eqx.Module):
+    """The core model used in experiments.
+    
+    This is a Q function with a shared trunk and multiple ensemble
+    heads. The ensemble dimension output is along axis -2.
+    """
+    input_size: int
+    output_size: int
+    config: Dict[str, Any]
+    pre: eqx.Module
+    memory: eqx.Module
+    q: eqx.Module
+
+    def __init__(self, obs_shape, act_shape, memory_module, config, key):
+        self.config = config
+        self.output_size = act_shape
+        keys = random.split(key, 4)
+        [self.input_size] = obs_shape
+        self.pre = eqx.filter_vmap(Block(self.input_size, config["mlp_size"], 0, keys[1]))
+        self.memory = memory_module
+
+        ensemble_keys = random.split(keys[0], config["ensemble_size"])
+
+        @eqx.filter_vmap
+        def make_heads(key):
+            return QHead(config["head_size"], config["mlp_size"], act_shape, config["dropout"], key)
+                    
+        self.q = make_heads(ensemble_keys)
+
+
+    def __call__(self, x, key):
+        """Returns an ensemble of Q values of shape [ensemble, actions]"""
+        T = x.shape[0]
+        net_keys = random.split(key, T + 1)
+        x = self.pre(x, net_keys[:T])
+
+        @eqx.filter_vmap(in_axes=(eqx.if_array(0), None, None))
+        def ensemble(model, x, key):
+            return model(x, key=key)
+
+            
+        q = ensemble(self.q, x, net_keys[-1])
+        return q
+
+    def median(self, x, key):
+        """Returns the median Q value over the ensemble"""
+        q = self(x, key)
+        return jnp.median(q, axis=0)
+
+    def mean(self, x, key):
+        """Returns the mean Q value over the ensemble"""
+        q = self(x, key)
+        return jnp.mean(q, axis=0)
+
+    def min(self, x, key):
+        """Returns the min Q value over the ensemble"""
+        q = self(x, key)
+        return jnp.min(q, axis=0)
+
+def greedy_policy(
+    q_network, x, key=None
+):
+    # Expand for ensemble
+    q_values = q_network(jnp.expand_dims(x, 0), key=key)
+    action = jnp.argmax(q_values)
+    return action
