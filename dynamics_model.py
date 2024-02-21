@@ -28,7 +28,8 @@ class StateTransitionModel(eqx.Module):
 
 def loss_fn(model, state, action, next_state):
   pred_next_state = eqx.filter_vmap(model)(state, action)
-  return jnp.mean(0.5 * (pred_next_state - next_state) ** 2)
+  mae = jnp.mean(jnp.abs(pred_next_state - next_state), axis=0)
+  return jnp.mean(0.5 * (pred_next_state - next_state) ** 2), mae
 
 batch_size = 64
 epochs = 10_000
@@ -54,10 +55,10 @@ for epoch in range(epochs):
   action = train["action"][batch_idx]
   next_state = train["next_state"][batch_idx]
 
-  loss, grad = eqx.filter_jit(eqx.filter_value_and_grad(loss_fn))(model, state, action, next_state)
-  val_loss = eqx.filter_jit(loss_fn)(model, val["state"], val["action"], val["next_state"])
+  (loss, info), grad = eqx.filter_jit(eqx.filter_value_and_grad(loss_fn, has_aux=True))(model, state, action, next_state)
+  val_loss, val_mae = eqx.filter_jit(loss_fn)(model, val["state"], val["action"], val["next_state"])
   updates, opt_state = opt.update(
     grad, opt_state, params=eqx.filter(model, eqx.is_inexact_array)
   )
   model = eqx.apply_updates(model, updates)
-  pbar.set_description(f"loss: {loss:0.4f}, val_loss: {val_loss:0.4f}")
+  pbar.set_description(f"loss: {loss:0.4f}, val_loss: {val_loss:0.4f}, val_mae (px, py): {val_mae[0]:.4f}, {val_mae[1]:.4f}")
