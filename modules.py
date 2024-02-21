@@ -11,6 +11,7 @@ def leaky_relu(x, key=None):
     return jax.nn.leaky_relu(x)
 
 def default_init(key, linear, scale=1.0, zero_bias=False, fixed_bias=None):
+    """Default init used in pytorch"""
     lim = math.sqrt(scale / linear.in_features)
     linear = eqx.tree_at(lambda l: l.weight, linear, jax.random.uniform(key, linear.weight.shape, minval=-lim, maxval=lim))
     if zero_bias:
@@ -20,13 +21,14 @@ def default_init(key, linear, scale=1.0, zero_bias=False, fixed_bias=None):
     return linear
 
 def final_linear(key, input_size, output_size, scale=0.01):
+    """a nn.Linear layer with initialization for the final layer of a value function"""
     #linear = ortho_linear(key, input_size, output_size, scale=scale)
     linear = nn.Linear(input_size, output_size, key=key)
     linear = default_init(key, linear, scale=scale, zero_bias=True)
-    #linear = eqx.tree_at(lambda l: l.bias, linear, linear.bias * 0.0)
     return linear
 
 class Block(eqx.Module):
+    """A standard nn layer with linear, norm, and activation."""
     net: eqx.Module
     def __init__(self, input_size, output_size, dropout, key):
         if dropout == 0.0:
@@ -47,6 +49,7 @@ class Block(eqx.Module):
         return self.net(x, key=key)
 
 class RandomSequential(nn.Sequential):
+    """A nn.Sequential layer that passes through random keys"""
     def __call__(self, x, key=None):
         return super().__call__(x, key=key)
 
@@ -75,7 +78,7 @@ class QHead(eqx.Module):
         return V + (A - A.mean(axis=-1, keepdims=True))
 
 class QNetwork(eqx.Module):
-    """Single agent Q network"""
+    """Single agent Q network for DDPG"""
     observation_size: int
     action_size: int
     hidden_size: int
@@ -93,7 +96,6 @@ class QNetwork(eqx.Module):
             nn.Linear(self.hidden_size, self.hidden_size, key=keys[1]),
             nn.LayerNorm((self.hidden_size,)),
             leaky_relu,
-            #nn.Linear(self.hidden_size, 1, key=keys[2]),
             final_linear(keys[2], self.hidden_size, 1, scale=0.01)
         ])
 
@@ -104,7 +106,7 @@ class QNetwork(eqx.Module):
 
 
 class Policy(eqx.Module):
-    """Single agent policy"""
+    """Single agent policy for DDPG"""
     observation_size: int
     hidden_size: int
     action_low: np.array
@@ -142,7 +144,7 @@ class Policy(eqx.Module):
 class EnsembleQNetwork(eqx.Module):
     """The core model used in experiments.
     
-    This is a Q function with a shared trunk and multiple ensemble
+    This is a discrete Q function with a shared trunk and multiple ensemble
     heads. The ensemble dimension output is along axis -2.
     """
     input_size: int
@@ -155,12 +157,12 @@ class EnsembleQNetwork(eqx.Module):
     def __init__(self, obs_shape, act_shape, memory_module, config, key):
         self.config = config
         self.output_size = act_shape
-        keys = random.split(key, 4)
+        keys = random.split(key, 2)
         [self.input_size] = obs_shape
-        self.pre = eqx.filter_vmap(Block(self.input_size, config["mlp_size"], 0, keys[1]))
+        self.pre = eqx.filter_vmap(Block(self.input_size, config["mlp_size"], 0, keys[0]))
         self.memory = memory_module
 
-        ensemble_keys = random.split(keys[0], config["ensemble_size"])
+        ensemble_keys = random.split(keys[1], config["ensemble_size"])
 
         @eqx.filter_vmap
         def make_heads(key):
@@ -172,31 +174,16 @@ class EnsembleQNetwork(eqx.Module):
     def __call__(self, x, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
         T = x.shape[0]
-        net_keys = random.split(key, T + 1)
+        net_keys = random.split(key, T + self.config["ensemble_size"])
         x = self.pre(x, net_keys[:T])
 
-        @eqx.filter_vmap(in_axes=(eqx.if_array(0), None, None))
+        @eqx.filter_vmap(in_axes=(eqx.if_array(0), None, 0))
         def ensemble(model, x, key):
             return model(x, key=key)
 
-            
-        q = ensemble(self.q, x, net_keys[-1])
+        #q = eqx.filter_vmap(self.q, in_axes=(eqx.if_array(0), None, None))
+        q = ensemble(self.q, x, net_keys[T:])
         return q
-
-    def median(self, x, key):
-        """Returns the median Q value over the ensemble"""
-        q = self(x, key)
-        return jnp.median(q, axis=0)
-
-    def mean(self, x, key):
-        """Returns the mean Q value over the ensemble"""
-        q = self(x, key)
-        return jnp.mean(q, axis=0)
-
-    def min(self, x, key):
-        """Returns the min Q value over the ensemble"""
-        q = self(x, key)
-        return jnp.min(q, axis=0)
 
 def greedy_policy(
     q_network, x, key=None

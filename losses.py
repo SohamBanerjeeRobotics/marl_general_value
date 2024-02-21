@@ -10,6 +10,7 @@ def huber(x):
     )
 
 def soft_update(network, target, tau):
+    """Update the parameters of a target net using Polyak averaging."""
     def polyak(param, target_param):
         return target_param * (1 - tau) + param * tau
 
@@ -21,6 +22,7 @@ def soft_update(network, target, tau):
     return target
 
 def critic_loss(q_network, q_target, policy, tape, gamma, noise_scale, key):
+    """DDPG critic loss"""
     q_value = q_network(
         tape["observation"], tape["action"], key=key
     )
@@ -36,6 +38,7 @@ def critic_loss(q_network, q_target, policy, tape, gamma, noise_scale, key):
     return td_error, td_error
 
 def dqn_ensemble_loss(q_network, q_target, tape, gamma, noise_scale, key):
+    """Q Loss for a discrete Q function"""
     q_value = q_network(tape["state"], key=key)
     # Argmax over the action dim, but not ensemble dim
     next_q = jax.lax.stop_gradient(q_target(
@@ -48,6 +51,7 @@ def dqn_ensemble_loss(q_network, q_target, tape, gamma, noise_scale, key):
     return td_error, td_error
 
 def policy_loss(policy, q_network, tape, key):
+    """DDPG actor loss"""
     actions = policy(tape['observation'], noise_scale=jnp.array(0), key=key)
     [q_value] = q_network(tape['observation'], actions)
     return -q_value
@@ -63,7 +67,7 @@ def mean_reduce(fn, *args, **kwargs):
     return outputs, reduced_grad
 
 def update_qnet(q_network, q_target, tape, opt, opt_state, gamma, tau, key):
-    """Updates the critic. This function will vmap over the agent dimension,
+    """Updates the discrete Q network. This function will vmap over the agent dimension,
     assuming all agents follow the same q function/policy."""
     loss = eqx.filter_value_and_grad(critic_loss, has_aux=True)
     B = tape['next_reward'].shape[0]
