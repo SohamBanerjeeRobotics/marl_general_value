@@ -81,8 +81,20 @@ def dataset_from_csv(path: str) -> Dict[str, jax.Array]:
     """Load dataset from CSV."""
     df = pd.read_csv(path)
     data = {
-        "state": np.stack([df['prev_state.pe'], df['prev_state.pn'], df['prev_state.yaw']], axis=-1),
-        "next_state": np.stack([df['curr_state.pe'], df['curr_state.pn'], df['curr_state.yaw']], axis=-1),
+        "state": np.stack([
+            df['prev_state.pe'], 
+            df['prev_state.pn'], 
+            df['prev_state.ve'], 
+            df['prev_state.vn'], 
+            df['prev_state.yaw']
+        ], axis=-1),
+        "next_state": np.stack([
+            df['curr_state.pe'], 
+            df['curr_state.pn'], 
+            df['curr_state.ve'], 
+            df['curr_state.vn'], 
+            df['curr_state.yaw']
+        ], axis=-1),
         "action": np.stack([df['prev_action.e'], df['prev_action.n']], axis=-1),
     }
     data["action"] = jax.vmap(action_to_discrete, in_axes=(0, None))(data["action"], 0.1)

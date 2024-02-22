@@ -36,9 +36,9 @@ epochs = 10_000
 key = jax.random.PRNGKey(0)
 key, model_key, data_key = jax.random.split(key, 3)
 #  TODO: Should include velocity
-model = StateTransitionModel(state_size=3, num_actions=9, dropout=0, key=model_key)
+model = StateTransitionModel(state_size=5, num_actions=9, dropout=0, key=model_key)
 data, data_size = dataset_from_csv(
-  "/local/scratch/sm2558/general_value/data/random-1hz-fixedspeedactions-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+  "data/random-1hz-fixspd-fulllog-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
 )
 train, test, val = split_dataset(data, data_size, key=data_key)
 lr_schedule = optax.constant_schedule(0.0001)
@@ -61,4 +61,4 @@ for epoch in range(epochs):
     grad, opt_state, params=eqx.filter(model, eqx.is_inexact_array)
   )
   model = eqx.apply_updates(model, updates)
-  pbar.set_description(f"loss: {loss:0.4f}, val_loss: {val_loss:0.4f}, val_mae (px, py): {val_mae[0]:.4f}, {val_mae[1]:.4f}")
+  pbar.set_description(f"loss: {loss:0.4f}, val_loss: {val_loss:0.4f}, val_mae (px, py, vx, vy): {val_mae[0]:.4f}, {val_mae[1]:.4f}, {val_mae[2]:.4f}, {val_mae[3]:.4f}")
