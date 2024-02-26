@@ -12,7 +12,7 @@ from dynamics_model import StateTransitionModel
 def loss_fn(model, state, action, next_state):
   pred_next_state = eqx.filter_vmap(model)(state, action)
   mae = jnp.mean(jnp.abs(pred_next_state - next_state), axis=0)
-  return jnp.mean(0.5 * (pred_next_state - next_state) ** 2), mae
+  return jnp.mean(jnp.abs(pred_next_state - next_state)), mae
 
 def multistep_loss_fn(model, state, action, next_state, length=10):
   for l in range(length):
@@ -23,7 +23,7 @@ def multistep_loss_fn(model, state, action, next_state, length=10):
   #state = state[:length]
   #next_state = next_state[-length:]
   next_state = next_state[length:]
-  mae = jnp.mean(jnp.abs(state - next_state), axis=0)
+  mae = jnp.mean(0.5 * (state - next_state) ** 2, axis=0)
   return jnp.mean(0.5 * (state - next_state) ** 2), mae
 
 
@@ -40,7 +40,7 @@ def multistep_integrator(state, action, next_state, length=10):
     state = state[:-1]
     action = action[1:]
   next_state = next_state[length:]
-  mae = jnp.mean(jnp.abs(state - next_state), axis=0)
+  mae = jnp.mean(0.5 * (state - next_state) ** 2, axis=0)
   return jnp.mean(0.5 * (state - next_state) ** 2), mae
 
 batch_size = 64
@@ -80,7 +80,7 @@ def train_fn(model, train, val, opt_state, sample_key):
 best_model = None
 best_val_loss = jnp.inf
 pbar = tqdm.tqdm(total=epochs)
-for epoch in range(1000):
+for epoch in range(epochs):
   model, loss, val_loss, val_mae, opt_state, key = eqx.filter_jit(train_fn)(model, train, val, opt_state, key)
   if val_loss < best_val_loss:
     best_model = model
