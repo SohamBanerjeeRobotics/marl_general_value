@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, List
 import enum
 import pandas as pd
 import jax
@@ -17,14 +17,27 @@ STATE_IDX = {
 ACTION_IDX = {
     "0": jnp.array(0),
     "W": jnp.array(1),
-    "E": jnp.array(2),
+    "SW": jnp.array(2),
     "S": jnp.array(3),
-    "N": jnp.array(4),
-    "SW": jnp.array(5),
-    "NW": jnp.array(6),
-    "SE": jnp.array(7),
-    "NE": jnp.array(8),
+    "SE": jnp.array(4),
+    "E": jnp.array(5),
+    "NE": jnp.array(6),
+    "N": jnp.array(7),
+    "NW": jnp.array(8),
 }
+ACTION_VEL = {
+    "0": jnp.array([0, 0]),
+    "W": jnp.array([-1, 0]),
+    "SW": jnp.array([-1, -1]),
+    "S": jnp.array([0, -1]),
+    "SE": jnp.array([1, -1]),
+    "E": jnp.array([1, 0]),
+    "NE": jnp.array([1, 1]),
+    "N": jnp.array([0, 1]),
+    "NW": jnp.array([-1, 1]),
+}
+ACTION_VEL = {k: 0.3 * (v / jnp.linalg.norm(v)) for k, v in ACTION_VEL.items()}
+ACTION_VEL["0"] = jnp.array([0, 0])
 
 import numpy as np
 
@@ -76,37 +89,49 @@ def test_action_to_discrete():
     discrete_actions = jax.vmap(action_to_discrete, in_axes=(0, None))(actions_batch, 0.1)
     assert discrete_actions == jnp.arange(9)
 
-
-def dataset_from_csv(path: str) -> Dict[str, jax.Array]:
+def dataset_from_csv(paths: List[str]) -> Dict[str, jax.Array]:
     """Load dataset from CSV."""
-    df = pd.read_csv(path)
-    data = {
-        "state": np.stack([
-            df['prev_state.pe'], 
-            df['prev_state.pn'], 
-            df['prev_state.ve'], 
-            df['prev_state.vn'], 
-            df['prev_state.yaw']
-        ], axis=-1),
-        "next_state": np.stack([
-            df['curr_state.pe'], 
-            df['curr_state.pn'], 
-            df['curr_state.ve'], 
-            df['curr_state.vn'], 
-            df['curr_state.yaw']
-        ], axis=-1),
-        "action": np.stack([df['prev_action.e'], df['prev_action.n']], axis=-1),
-    }
+    datas = []
+    size = 0
+    for path in paths:
+        df = pd.read_csv(path)
+        data = {
+            "state": np.stack([
+                df['prev_state.pe'], 
+                df['prev_state.pn'], 
+                df['prev_state.ve'], 
+                df['prev_state.vn'], 
+                df['prev_state.yaw']
+            ], axis=-1),
+            "next_state": np.stack([
+                df['curr_state.pe'], 
+                df['curr_state.pn'], 
+                df['curr_state.ve'], 
+                df['curr_state.vn'], 
+                df['curr_state.yaw']
+            ], axis=-1),
+            "action": np.stack([df['prev_action.e'], df['prev_action.n']], axis=-1),
+        }
+        # Previous state for zeroth entry is not valid
+        data = {k: v[1:] for k, v in data.items()}
+        # TODO: Remove when dataset fixed
+        #data["next_state"] = data["state"][1:]
+        #data["state"] = data["state"][:-1]
+        #data["action"] = data["action"][1:]
+
+        datas.append(data)
+        size += len(df) - 1
+
+    data = {key: None for key in datas[0].keys()} 
+    for key in data.keys():
+        data[key] = jnp.concatenate([d[key] for d in datas], axis=0)
+    
     data["action"] = jax.vmap(action_to_discrete, in_axes=(0, None))(data["action"], 0.1)
-    # TODO: Must do next_state before split
-    #df['next_state'] = df['state']
-    #df['state'] = df['state'].shift(-1)
-    # Discard final transition which will have NaN state
-    #data = data[:, :-1]
     data = {k: jnp.array(v, copy=False) for k, v in data.items()}
-    return data, len(df)
+    return data, size
 
 def add_next_state(dataset: Dict[str, jax.Array]) -> Dict[str, jax.Array]:
+
     """Add next state to the dataset.
     
     WARNING: This assumes the entire dataset is contiguous (we can get next_state by shifting state by one)
