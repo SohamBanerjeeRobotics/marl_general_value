@@ -40,4 +40,5 @@ if __name__ == '__main__':
   model = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", model)
   for action, idx in ACTION_IDX.items():
     print(f"action {action}: {model(jnp.array([1.0, 1.0, 0, 0, 0]), idx)}")
-  breakpoint()
+  for action, idx in ACTION_IDX.items():
+    print(f"action {action} delta: {jnp.array([1.0, 1.0, 0, 0, 0]) - model(jnp.array([1.0, 1.0, 0, 0, 0]), idx)}")
