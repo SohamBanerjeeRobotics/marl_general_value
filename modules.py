@@ -202,6 +202,7 @@ class GeneralQNetwork(eqx.Module):
                     
     def __call__(self, x, task, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
+        assert x.ndim == 1 and task.ndim == 1
         # Expects x to be of shape [S]
         net_keys = random.split(key, 3)
         x = jnp.concatenate([x, task])

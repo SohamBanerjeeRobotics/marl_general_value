@@ -37,6 +37,22 @@ def critic_loss(q_network, q_target, policy, tape, gamma, noise_scale, key):
     [td_error] = huber(error)
     return td_error, td_error
 
+
+def general_critic_loss(q_network, q_target, data, gamma, key):
+    """critic loss"""
+    q_value = q_network(
+        data["state"], data["task_embedding"], key=key
+    )[data["action"].squeeze(0)]
+
+    next_q = jax.lax.stop_gradient(q_target(
+        data["next_state"], data["task_embedding"], key=key
+    )).max()
+
+    target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
+    error = q_value - target
+    [td_error] = huber(error)
+    return td_error, td_error
+
 def dqn_ensemble_loss(q_network, q_target, tape, gamma, noise_scale, key):
     """Q Loss for a discrete Q function"""
     q_value = q_network(tape["state"], key=key)
@@ -82,6 +98,25 @@ def update_qnet(q_network, q_target, tape, opt, opt_state, gamma, tau, key):
     q_network = eqx.apply_updates(q_network, updates)
     q_target = soft_update(q_network, q_target, tau=tau)
     return q_network, td_error, value
+
+
+def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, key):
+    """Updates the discrete Q network. This function will vmap over the task and batch dims."""
+    loss_fn = eqx.filter_value_and_grad(general_critic_loss, has_aux=True)
+    B = data['next_reward'].shape[0]
+    A  = data['next_reward'].shape[1]
+    keys = jax.random.split(key, B * A).reshape(B, A, -1)
+    # loss_fn args: q_network, q_target, data, gamma, key
+    task_loss_fn = eqx.filter_vmap(loss_fn, in_axes=(None, None, 0, None, 0)) 
+    batch_loss_fn = eqx.filter_vmap(task_loss_fn, in_axes=(None, None, 0, None, 0))  
+    (value, td_error), grad = mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
+    updates, opt_state = opt.update(
+        grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
+    )
+    q_network = eqx.apply_updates(q_network, updates)
+    q_target = soft_update(q_network, q_target, tau=tau)
+    return q_network, q_target, td_error, value
+    
 
 
 def update_critic(q_network, q_target, policy, tape, opt, opt_state, gamma, noise_scale, tau, key):

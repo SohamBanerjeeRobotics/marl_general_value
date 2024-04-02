@@ -23,8 +23,8 @@ def speed_reward(dataset, sign=1.0):
 
 def goal_pos_reward(dataset, goal_pos):
     """Reward for relative distance to goal"""
-    return (dataset["state"][...,STATE_IDX["pos"]] - goal_pos) ** 2
+    return jnp.sum((dataset["state"][...,STATE_IDX["pos"]] - goal_pos) ** 2, axis=-1)
 
 def goal_vel_reward(dataset, goal_vel):
     """Reward for relative velocity to goal"""
-    return (dataset["state"][...,STATE_IDX["vel"]] - goal_vel) ** 2
+    return jnp.sum((dataset["state"][...,STATE_IDX["vel"]] - goal_vel) ** 2, axis=-1)

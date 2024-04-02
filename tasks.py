@@ -96,11 +96,22 @@ def compute_rewards(dataset, reward_dict):
 
     # TODO: Do not rely on goal, generalize
     stacked_goals = reward_dict["reward_kwargs"]["goal"].reshape(1, G, -1)
-    stacked_rewards = reward_dict["reward_function"](stacked_dataset, stacked_goals)
-    stacked_task_embeddings = jnp.array(reward_dict["task_embedding"]).reshape(1, G, -1)
+    stacked_rewards = reward_dict["reward_function"](stacked_dataset, stacked_goals).reshape(B, G, 1)
+    #assert stacked_rewards.shape == (B, G)
+
+
+    stacked_task_embeddings = jnp.repeat(jnp.array(reward_dict["task_embedding"]).reshape(1, G, -1), B, axis=0)
+
+    # Repeat dataset over each reward/task
+    stacked_dataset = {
+        k: jnp.repeat(v, G, axis=1)
+        for k, v in stacked_dataset.items()
+    }
+
     stacked_dataset.update({
-        "reward": stacked_rewards,
-        "task_embedding": stacked_task_embeddings
+        "next_reward": stacked_rewards,
+        "task_embedding": stacked_task_embeddings,
+        "next_done": jnp.zeros(stacked_rewards.shape, dtype=bool)
     })
     return stacked_dataset
     
