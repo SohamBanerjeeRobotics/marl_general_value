@@ -62,20 +62,20 @@ class QHead(eqx.Module):
     def __init__(self, input_size, hidden_size, output_size, dropout, key):
         keys = random.split(key, 3)
 
-        self.post0 = eqx.filter_vmap(Block(input_size, hidden_size, dropout, keys[0]))
-        self.post1 = eqx.filter_vmap(Block(hidden_size, hidden_size, dropout, keys[1]))
-        self.value = eqx.filter_vmap(final_linear(keys[2], input_size, 1, scale=0.01))
-        self.advantage = eqx.filter_vmap(final_linear(keys[3], input_size, output_size, scale=0.01))
+        self.post0 = Block(input_size, hidden_size, dropout, keys[0])
+        self.post1 = Block(hidden_size, hidden_size, dropout, keys[1])
+        self.value = final_linear(keys[2], input_size, 1, scale=0.01)
+        self.advantage = final_linear(keys[3], input_size, output_size, scale=0.01)
 
     def __call__(self, x, key):
         T = x.shape[0]
-        net_keys = random.split(key, 2 * T)
-        x = self.post0(x, net_keys[:T])
-        x = self.post1(x, net_keys[T:2*T])
+        net_keys = random.split(key, 2)
+        x = self.post0(x, net_keys[0])
+        x = self.post1(x, net_keys[1])
         V = self.value(x) 
         A = self.advantage(x)
         # Dueling DQN
-        return V + (A - A.mean(axis=-1, keepdims=True))
+        return V + (A - A.mean(keepdims=True))
 
 class QNetwork(eqx.Module):
     """Single agent Q network for DDPG"""
@@ -150,17 +150,17 @@ class EnsembleQNetwork(eqx.Module):
     input_size: int
     output_size: int
     config: Dict[str, Any]
-    pre: eqx.Module
-    memory: eqx.Module
+    torso0: Block
+    torso1: Block
     q: eqx.Module
 
-    def __init__(self, obs_shape, act_shape, memory_module, config, key):
+    def __init__(self, obs_shape, act_shape, config, key):
         self.config = config
         self.output_size = act_shape
         keys = random.split(key, 2)
         [self.input_size] = obs_shape
-        self.pre = eqx.filter_vmap(Block(self.input_size, config["mlp_size"], 0, keys[0]))
-        self.memory = memory_module
+        self.torso0 = Block(self.input_size, config["mlp_size"], 0, keys[0])
+        self.torso1 = Block(config["mlp_size"], config["mlp_size"], 0, keys[1])
 
         ensemble_keys = random.split(keys[1], config["ensemble_size"])
 
@@ -174,16 +174,44 @@ class EnsembleQNetwork(eqx.Module):
     def __call__(self, x, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
         T = x.shape[0]
-        net_keys = random.split(key, T + self.config["ensemble_size"])
-        x = self.pre(x, net_keys[:T])
+        net_keys = random.split(key, 2 * T + self.config["ensemble_size"])
+        x = self.torso0(x, net_keys[:T])
+        x = self.torso1(x, net_keys[T:2 * T])
 
         @eqx.filter_vmap(in_axes=(eqx.if_array(0), None, 0))
         def ensemble(model, x, key):
             return model(x, key=key)
 
         #q = eqx.filter_vmap(self.q, in_axes=(eqx.if_array(0), None, None))
-        q = ensemble(self.q, x, net_keys[T:])
+        q = ensemble(self.q, x, net_keys[2 * T:])
         return q
+
+class GeneralQNetwork(eqx.Module):
+    config: Dict[str, Any]
+    torso0: Block
+    torso1: Block
+    q: eqx.Module
+
+    def __init__(self, obs_size, task_size, act_size, config, key):
+        self.config = config
+        keys = random.split(key, 3)
+        self.torso0 = Block(obs_size + task_size, config["mlp_size"], 0, keys[0])
+        self.torso1 = Block(config["mlp_size"], config["mlp_size"], 0, keys[1])
+
+        self.q = QHead(config["head_size"], config["mlp_size"], act_size, config["dropout"], keys[2])
+                    
+    def __call__(self, x, task, key):
+        """Returns an ensemble of Q values of shape [ensemble, actions]"""
+        # Expects x to be of shape [S]
+        net_keys = random.split(key, 3)
+        x = jnp.concatenate([x, task])
+        x = self.torso0(x, net_keys[0])
+        x = self.torso1(x, net_keys[1])
+
+        q = self.q(x, net_keys[2])
+        return q
+
+
 
 def greedy_policy(
     q_network, x, key=None

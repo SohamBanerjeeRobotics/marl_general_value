@@ -4,9 +4,10 @@ import equinox as eqx
 import optax
 import tqdm
 
-from modules import EnsembleQNetwork, greedy_policy
+from modules import GeneralQNetwork, greedy_policy
 from losses import update_qnet
-from dataset import replay_buffer_from_csv
+from dataset import dataset_from_csv, replay_buffer_from_csv
+import tasks
 
 seed = 0
 batch_size = 1024
@@ -32,14 +33,36 @@ q_config = {
     "dropout": 0.0,
 }
 
-q_function = EnsembleQNetwork(24, 2, key)
-q_target = EnsembleQNetwork(24, 2, key)
+q_function = GeneralQNetwork(obs_size=24, task_size=1024, act_size=2, config=q_config, key=key)
+q_target = GeneralQNetwork(obs_size=24, task_size=1024, act_size=2, config=q_config, key=key)
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
 buffer, bufstate = replay_buffer_from_csv(
-    "data/random-1hz-fixedspeedactions-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv", 
+    [
+        "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+        "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+        "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+    ],
     batch_size
 )
+datasets = [
+  "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+]
+data, data_size = dataset_from_csv(datasets)
+
+all_tasks = tasks.make_global_navigation_tasks(3)
+# "task_string": task_strings,
+# "task_embedding": task_embeddings,
+# "reward_function": reward_fn,
+# "reward_kwargs": reward_kwargs
+
+reward_fn = all_tasks['reward_function']
+data_with_rewards = tasks.compute_rewards(data, all_tasks)
+# B, num_goals, S
+breakpoint()
+
 
 # metrics
 actor_loss = jnp.array([jnp.inf])

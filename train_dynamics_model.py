@@ -43,16 +43,17 @@ def multistep_integrator(state, action, next_state, length=10):
   mae = jnp.mean(0.5 * (state - next_state) ** 2, axis=0)
   return jnp.mean(0.5 * (state - next_state) ** 2), mae
 
-batch_size = 64
-epochs = 10_000
+batch_size = 32
+epochs = 300
 key = jax.random.PRNGKey(0)
 key, model_key, data_key = jax.random.split(key, 3)
 #  TODO: Should include velocity
 model = StateTransitionModel(state_size=5, num_actions=9, dropout=0, key=model_key)
 
 datasets = [
-  "data/random-1hz-fixspd-fulllog-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/random-1hz-fulllog-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
 ]
 data, data_size = dataset_from_csv(datasets)
 train, test, val = split_dataset(data, data_size, key=data_key)
@@ -62,11 +63,10 @@ opt = optax.chain(
 )
 opt_state = opt.init(eqx.filter(model, eqx.is_inexact_array))
 
-def train_fn(model, train, val, opt_state, sample_key):
-  batch_idx = jax.random.randint(sample_key, (batch_size,), 0, data_size)
-  state = train["state"][batch_idx]
-  action = train["action"][batch_idx]
-  next_state = train["next_state"][batch_idx]
+def train_fn(model, batch, val, opt_state):
+  state = batch["state"]
+  action = batch["action"]
+  next_state = batch["next_state"]
 
   (loss, _), grad = eqx.filter_value_and_grad(loss_fn, has_aux=True)(model, state, action, next_state)
   updates, opt_state = opt.update(
@@ -74,19 +74,21 @@ def train_fn(model, train, val, opt_state, sample_key):
   )
   model = eqx.apply_updates(model, updates)
   val_loss, val_mae = loss_fn(model, val["state"], val["action"], val["next_state"])
-  return model, loss, val_loss, val_mae, opt_state, jax.random.split(sample_key)[0]
+  return model, loss, val_loss, val_mae, opt_state
 
 
 best_model = None
 best_val_loss = jnp.inf
-pbar = tqdm.tqdm(total=epochs)
 for epoch in range(epochs):
-  model, loss, val_loss, val_mae, opt_state, key = eqx.filter_jit(train_fn)(model, train, val, opt_state, key)
-  if val_loss < best_val_loss:
-    best_model = model
-    best_val_loss = val_loss
-  pbar.update()
-  pbar.set_description(f"loss: {loss:0.4f}, val_loss: {val_loss:0.4f}, best: {best_val_loss:0.4f}, val_mae (px, py, vx, vy): {val_mae[0]:.3f}, {val_mae[1]:.3f}, {val_mae[2]:.3f}, {val_mae[3]:.3f}")
+  pbar = tqdm.tqdm(total=train["state"].shape[0] // batch_size)
+  for i in range(train["state"].shape[0] // batch_size):
+    batch = {k: v[i * batch_size : (i + 1) * batch_size] for k, v in train.items()}
+    model, loss, val_loss, val_mae, opt_state = eqx.filter_jit(train_fn)(model, batch, val, opt_state)
+    if val_loss < best_val_loss:
+      best_model = model
+      best_val_loss = val_loss
+    pbar.update()
+    pbar.set_description(f"Epoch: {epoch}, loss: {loss:0.4f}, val_loss: {val_loss:0.4f}, best: {best_val_loss:0.4f}, val_mae (px, py, vx, vy): {val_mae[0]:.3f}, {val_mae[1]:.3f}, {val_mae[2]:.3f}, {val_mae[3]:.3f}")
 
 test_loss, test_mae = eqx.filter_jit(loss_fn)(best_model, test["state"], test["action"], test["next_state"])
 # Can't use val/train/test as they will be shuffled and these must be in order

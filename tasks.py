@@ -3,6 +3,7 @@ import random
 
 from angle_emb import AnglE
 import numpy as np
+from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N
 
 random.seed(0)
 
@@ -51,7 +52,6 @@ def make_global_navigation_tasks(num_tasks=100):
             f"travel to global position ({x:0.3f}, {y:0.3f}).",
             f"advance to the position ({x:0.2f}, {y:0.2f}).",
         ]
-        breakpoint()
         idx = random.randint(0, len(command_strings) - 1)
         task_str = f"{prompt} {command_strings[idx]}"
         task_strings.append(task_str)
@@ -60,17 +60,53 @@ def make_global_navigation_tasks(num_tasks=100):
         goals.append((x, y))
 
     def reward_fn(dataset, goal):
-        return goal_pos_reward(dataset, goal) + 0.01 * goal_vel_reward(dataset, 0)
+        # Dataset shape: [B, 2]
+        # Goal shape: [G, 2]
+        # Output shape: [B, G]
+        # TODO: Add boundary reward
+        return goal_pos_reward(dataset, goal) + 0.01 * goal_vel_reward(dataset, 0) #+ boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N)
     
     reward_kwargs = {"goal": jnp.array(goals)}
     assert len(task_strings) == len(task_embeddings) == reward_kwargs["goal"].shape[0] == num_tasks
 
     return {
         "task_string": task_strings,
-        "task_embedding": task_embeddings,
+        "task_embedding": jnp.concatenate(task_embeddings, axis=0),
         "reward_function": reward_fn,
         "reward_kwargs": reward_kwargs
     }
 
-tasks = make_global_navigation_tasks()
-breakpoint()
+def compute_rewards(dataset, reward_dict):
+    """Compute the cartesian product of transition tuples and rewards.
+    
+    In other words, compute each reward function for each (s, a, s') tuple.
+
+    Takes a dataset of shape [B, ...] and a reward dict of shape [G, ...]
+
+    This should return an updated dataset of shape [B, G, ...], with new "reward" and "task string" keys.
+    """
+    # Compute dims
+    B = dataset['state'].shape[0]
+    G = reward_dict["reward_kwargs"]["goal"].shape[0]
+
+    stacked_dataset = {
+        k: v.reshape(B, 1, -1)
+        for k, v in dataset.items()
+    }
+
+    # TODO: Do not rely on goal, generalize
+    stacked_goals = reward_dict["reward_kwargs"]["goal"].reshape(1, G, -1)
+    stacked_rewards = reward_dict["reward_function"](stacked_dataset, stacked_goals)
+    stacked_task_embeddings = jnp.array(reward_dict["task_embedding"]).reshape(1, G, -1)
+    stacked_dataset.update({
+        "reward": stacked_rewards,
+        "task_embedding": stacked_task_embeddings
+    })
+    return stacked_dataset
+    
+
+
+
+
+#ALL_TASKS = make_global_navigation_tasks()
+#breakpoint()
