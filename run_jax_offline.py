@@ -1,3 +1,4 @@
+from dynamics_model import StateTransitionModel
 import jax
 import jax.numpy as jnp
 import equinox as eqx
@@ -6,18 +7,19 @@ import h5py
 import tqdm
 
 from modules import GeneralQNetwork, greedy_policy
-from losses import update_general_qnet, update_qnet
-from dataset import dataset_from_csv, replay_buffer_from_csv
+from losses import update_general_qnet
+from tasks import add_rewards_to_dataset, make_global_navigation_tasks
 
 seed = 0
-batch_size = 2
+batch_size = 1
 tau = jnp.array(1 / 200)
 num_agents = 1
 num_envs = 128
 key = jax.random.PRNGKey(seed)
 #env = vmas.make_env("sampling", num_envs=num_envs)
-epochs = 1_000
+epochs = 10
 gamma = jnp.array([0.99])
+eval_episodes = 10
 
 
 # opt setup
@@ -27,10 +29,10 @@ opt = optax.chain(
     optax.adamw(lr_schedule),
 )
 q_config = {
-    "mlp_size": 256,
-    "head_size": 256,
-    "ensemble_size": 5,
-    "dropout": 0.0,
+    "mlp_size": 384,
+    "head_size": 384,
+    "ensemble_size": 1,
+    "dropout": 0.1,
 }
 
 q_function = GeneralQNetwork(obs_size=5, task_size=1024, act_size=9, config=q_config, key=key)
@@ -40,6 +42,10 @@ opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 dataset_with_str = h5py.File("dataset.h5", "r")
 dataset = {k: v for k,v in dataset_with_str.items() if k != 'task_string'} 
 data_size = dataset['next_reward'].shape[0]
+
+simulator = StateTransitionModel(state_size=5, num_actions=9, dropout=0, key=jax.random.PRNGKey(0))
+simulator = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", simulator)
+eval_tasks = make_global_navigation_tasks(eval_episodes)
 
 # B, num_goals, S
 test_data = {k: v[:10] for k, v in dataset.items()}
@@ -69,3 +75,38 @@ for epoch in range(epochs):
         out_str = f"Epoch {epoch}/{epochs} ql: {td_error.mean():0.4f} "
         pbar.set_description(out_str)
         pbar.update()
+
+    # Eval
+    ep_rewards = 0
+    for i in range(eval_episodes):
+        agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
+        done = False
+        eval_task = {
+            "task_string": eval_tasks["task_string"][i:i+1],
+            "task_embedding": eval_tasks["task_embedding"][i:i+1],
+            "reward_function": eval_tasks["reward_function"],
+            "done_function": eval_tasks["done_function"],
+            "reward_kwargs": {"goal": eval_tasks["reward_kwargs"]["goal"][i:i+1]},
+        }
+        ep_reward = 0
+        num_steps = 0
+        while not done and num_steps < 1000:
+            action = greedy_policy(q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
+            next_state = simulator(agent_state, action)
+            reward_fn_inputs = {
+                "state": agent_state.reshape(1, -1),
+                "action": action.reshape(1, -1),
+                "next_state": next_state.reshape(1, -1),
+                #"next_reward": eval_tasks["reward_function"](next_state, eval_tasks["reward_kwargs"]["goal"][i]),
+                #"next_done": eval_tasks["done_function"][i](next_state, eval_tasks["reward_kwargs"]["goal"][i]),
+            }
+            result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
+            reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
+            ep_reward += reward
+            num_steps += 1
+        ep_rewards += ep_reward
+
+        print("Episode reward: ", ep_rewards / eval_episodes)
+
+
+

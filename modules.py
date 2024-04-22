@@ -198,7 +198,7 @@ class GeneralQNetwork(eqx.Module):
         self.torso0 = Block(obs_size + task_size, config["mlp_size"], 0, keys[0])
         self.torso1 = Block(config["mlp_size"], config["mlp_size"], 0, keys[1])
 
-        self.q = QHead(config["head_size"], config["mlp_size"], act_size, config["dropout"], keys[2])
+        self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
                     
     def __call__(self, x, task, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
@@ -215,9 +215,9 @@ class GeneralQNetwork(eqx.Module):
 
 
 def greedy_policy(
-    q_network, x, key=None
+    q_network, x, task, key=None
 ):
     # Expand for ensemble
-    q_values = q_network(jnp.expand_dims(x, 0), key=key)
+    q_values = q_network(x, task, key=key)
     action = jnp.argmax(q_values)
     return action
