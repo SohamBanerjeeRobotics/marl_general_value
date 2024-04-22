@@ -48,8 +48,8 @@ simulator = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", simul
 eval_tasks = make_global_navigation_tasks(eval_episodes)
 
 # B, num_goals, S
-test_data = {k: v[:10] for k, v in dataset.items()}
-_, _, td_error, qvalue = update_general_qnet(q_function, q_target, test_data, opt, opt_state, gamma, tau, key)
+test_data = {k: v[:1] for k, v in dataset.items()}
+update_general_qnet(q_function, q_target, test_data, opt, opt_state, gamma, tau, key)
 
 
 # TODO: Utilize negative reward for leaving boundaries
@@ -71,8 +71,8 @@ for epoch in range(epochs):
         }
 
         key, _ = jax.random.split(key)
-        q_function, q_target, td_error, qvalue = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, gamma, tau, key)
-        out_str = f"Epoch {epoch}/{epochs} ql: {td_error.mean():0.4f} "
+        q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, gamma, tau, key)
+        out_str = f"Epoch {epoch}/{epochs} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
         pbar.set_description(out_str)
         pbar.update()
 

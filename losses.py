@@ -21,23 +21,6 @@ def soft_update(network, target, tau):
     target = eqx.tree_inference(target, True)
     return target
 
-def critic_loss(q_network, q_target, policy, tape, gamma, noise_scale, key):
-    """DDPG critic loss"""
-    q_value = q_network(
-        tape["observation"], tape["action"], key=key
-    )
-    action = policy(tape['next_observation'], noise_scale, key=key)
-
-    next_q = jax.lax.stop_gradient(q_target(
-        tape["next_observation"], action, key=key
-    ))
-
-    target = tape["next_reward"] + (1.0 - tape["next_done"]) * gamma * next_q 
-    error = q_value - target
-    [td_error] = huber(error)
-    return td_error, td_error
-
-
 def general_critic_loss(q_network, q_target, data, gamma, key):
     """critic loss"""
     q_value = q_network(
@@ -51,26 +34,7 @@ def general_critic_loss(q_network, q_target, data, gamma, key):
     target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
     error = q_value - target
     [td_error] = huber(error)
-    return td_error, td_error
-
-def dqn_ensemble_loss(q_network, q_target, tape, gamma, noise_scale, key):
-    """Q Loss for a discrete Q function"""
-    q_value = q_network(tape["state"], key=key)
-    # Argmax over the action dim, but not ensemble dim
-    next_q = jax.lax.stop_gradient(q_target(
-        tape["next_state"], key=key
-    )).max(axis=-1)
-
-    target = tape["next_reward"] + (1.0 - tape["next_done"]) * gamma * next_q 
-    error = q_value - target
-    [td_error] = huber(error)
-    return td_error, td_error
-
-def policy_loss(policy, q_network, tape, key):
-    """DDPG actor loss"""
-    actions = policy(tape['observation'], noise_scale=jnp.array(0), key=key)
-    [q_value] = q_network(tape['observation'], actions)
-    return -q_value
+    return td_error, (td_error, q_value, next_q)
 
 def mean_reduce(fn, *args, **kwargs):
     """Given a tree of gradients produced by fn with dims [Batch, Task, Params],
@@ -81,23 +45,6 @@ def mean_reduce(fn, *args, **kwargs):
     outputs, grad = fn(*args, **kwargs)
     reduced_grad = jax.tree_util.tree_map(lambda x: jnp.mean(x, axis=(0,1)), grad)
     return outputs, reduced_grad
-
-def update_qnet(q_network, q_target, tape, opt, opt_state, gamma, tau, key):
-    """Updates the discrete Q network. This function will vmap over the agent dimension,
-    assuming all agents follow the same q function/policy."""
-    loss = eqx.filter_value_and_grad(critic_loss, has_aux=True)
-    B = tape['next_reward'].shape[0]
-    A  = tape['next_reward'].shape[1]
-    keys = jax.random.split(key, B * A).reshape(B, A, -1)
-    marl_loss = eqx.filter_vmap(loss, in_axes=(None, None, None, 0, None, None, 0)) 
-    batch_loss = eqx.filter_vmap(marl_loss, in_axes=(None, None, None, 0, None, None, 0)) 
-    (value, td_error), grad = mean_reduce(batch_loss, q_network, q_target, tape, gamma, keys)
-    updates, opt_state = opt.update(
-        grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
-    )
-    q_network = eqx.apply_updates(q_network, updates)
-    q_target = soft_update(q_network, q_target, tau=tau)
-    return q_network, td_error, value
 
 
 def vmap_task(loss_fn):
@@ -167,45 +114,11 @@ def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, k
     }
 
     batch_loss_fn = vmap_batch(vmap_task(loss_fn))
-    (value, td_error), grad = mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
+    outputs, grad = mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
+    _, (td_error, q_value, q_target_value) = outputs
     updates, opt_state = opt.update(
         grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
     )
     q_network = eqx.apply_updates(q_network, updates)
     q_target = soft_update(q_network, q_target, tau=tau)
-    return q_network, q_target, td_error, value
-    
-
-
-def update_critic(q_network, q_target, policy, tape, opt, opt_state, gamma, noise_scale, tau, key):
-    """Updates the critic. This function will vmap over the agent dimension,
-    assuming all agents follow the same q function/policy."""
-    loss = eqx.filter_value_and_grad(critic_loss, has_aux=True)
-    B = tape['next_reward'].shape[0]
-    A  = tape['next_reward'].shape[1]
-    keys = jax.random.split(key, B * A).reshape(B, A, -1)
-    marl_loss = eqx.filter_vmap(loss, in_axes=(None, None, None, 0, None, None, 0)) 
-    batch_loss = eqx.filter_vmap(marl_loss, in_axes=(None, None, None, 0, None, None, 0)) 
-    (value, td_error), grad = mean_reduce(batch_loss, q_network, q_target, policy, tape, gamma, noise_scale, keys)
-    updates, opt_state = opt.update(
-        grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
-    )
-    q_network = eqx.apply_updates(q_network, updates)
-    q_target = soft_update(q_network, q_target, tau=tau)
-    return q_network, td_error, value
-
-def update_actor(policy, q_network, tape, opt, opt_state, noise_scale, key):
-    """Updates the policy. This function will vmap over the agent dimension,
-    assuming all agents follow the same q function/policy."""
-    loss = eqx.filter_value_and_grad(policy_loss)
-    B = tape['next_reward'].shape[0]
-    A  = tape['next_reward'].shape[1]
-    keys = jax.random.split(key, B * A).reshape(B, A, -1)
-    marl_loss = eqx.filter_vmap(loss, in_axes=(None, None, 0, 0)) # Not random!
-    batch_loss = eqx.filter_vmap(marl_loss, in_axes=(None, None, 0, 0)) # Not random!
-    value, grad = mean_reduce(batch_loss, policy, q_network, tape, keys)
-    updates, opt_state = opt.update(
-        grad, opt_state, params=eqx.filter(policy, eqx.is_inexact_array)
-    )
-    policy = eqx.apply_updates(policy, updates)
-    return policy, value
+    return q_network, q_target, td_error, q_value, q_target_value
