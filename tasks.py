@@ -66,8 +66,8 @@ def make_global_navigation_tasks(num_tasks=100):
         # Output shape: [B, G]
         # TODO: Add boundary reward
         return (
-            goal_pos_reward(dataset, goal) 
-            + 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
+            - goal_pos_reward(dataset, goal) 
+            - 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
             - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
