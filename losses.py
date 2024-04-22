@@ -166,12 +166,8 @@ def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, k
         k: v.squeeze(0) if k in ["task_embedding"] else v for k, v in data.items()
     }
 
-
-    # loss_fn args: q_network, q_target, data, gamma, key
-    #print({k: v.shape for k, v in data.items()})
     batch_loss_fn = vmap_batch(vmap_task(loss_fn))
     (value, td_error), grad = mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
-    #task_loss_fn(q_network, q_target, {k: v[0] for k, v in data.items()}, gamma, keys[0])
     updates, opt_state = opt.update(
         grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
     )

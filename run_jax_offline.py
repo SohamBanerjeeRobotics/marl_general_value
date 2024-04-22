@@ -78,6 +78,7 @@ for epoch in range(epochs):
 
     # Eval
     ep_rewards = 0
+    eval_q_function = eqx.nn.inference_mode(q_function)
     for i in range(eval_episodes):
         agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
         done = False
@@ -91,22 +92,19 @@ for epoch in range(epochs):
         ep_reward = 0
         num_steps = 0
         while not done and num_steps < 1000:
-            action = greedy_policy(q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
+            action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
             next_state = simulator(agent_state, action)
             reward_fn_inputs = {
                 "state": agent_state.reshape(1, -1),
                 "action": action.reshape(1, -1),
                 "next_state": next_state.reshape(1, -1),
-                #"next_reward": eval_tasks["reward_function"](next_state, eval_tasks["reward_kwargs"]["goal"][i]),
-                #"next_done": eval_tasks["done_function"][i](next_state, eval_tasks["reward_kwargs"]["goal"][i]),
             }
             result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
             reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
             ep_reward += reward
             num_steps += 1
         ep_rewards += ep_reward
-
-        print("Episode reward: ", ep_rewards / eval_episodes)
+    print("Episode reward: ", ep_rewards / eval_episodes)
 
 
 
