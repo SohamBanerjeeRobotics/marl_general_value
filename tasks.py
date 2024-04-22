@@ -125,23 +125,24 @@ def add_rewards_to_dataset(dataset, reward_dict):
     
 
 
-datasets = [
-  "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
-]
-data, data_size = dataset_from_csv(datasets)
-tasks = make_global_navigation_tasks(100)
-reward_fn = tasks['reward_function']
-data_with_rewards = add_rewards_to_dataset(data, tasks)
-with h5py.File("dataset.h5", "w") as file:
-    file.create_dataset("state", data=data_with_rewards["state"])
-    file.create_dataset("action", data=data_with_rewards["action"])
-    file.create_dataset("next_state", data=data_with_rewards["next_state"])
-    file.create_dataset("next_reward", data=data_with_rewards["next_reward"])
-    file.create_dataset("next_done", data=data_with_rewards["next_done"])
-    file.create_dataset("task_embedding", data=data_with_rewards["task_embedding"])
-    file.create_dataset("task_string", data=tasks["task_string"], dtype=h5py.special_dtype(vlen=str))
+if __name__ == '__main__':
+    datasets = [
+        "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+        "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+        "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+    ]
+    data, data_size = dataset_from_csv(datasets)
+    tasks = make_global_navigation_tasks(100)
+    reward_fn = tasks['reward_function']
+    data_with_rewards = add_rewards_to_dataset(data, tasks)
+    with h5py.File("dataset.h5", "w") as file:
+        file.create_dataset("state", data=data_with_rewards["state"])
+        file.create_dataset("action", data=data_with_rewards["action"])
+        file.create_dataset("next_state", data=data_with_rewards["next_state"])
+        file.create_dataset("next_reward", data=data_with_rewards["next_reward"])
+        file.create_dataset("next_done", data=data_with_rewards["next_done"])
+        file.create_dataset("task_embedding", data=data_with_rewards["task_embedding"])
+        file.create_dataset("task_string", data=tasks["task_string"], dtype=h5py.special_dtype(vlen=str))
 #file.create_dataset("task_strings", )
 
 #ALL_TASKS = make_global_navigation_tasks()
