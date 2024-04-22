@@ -101,10 +101,12 @@ for epoch in range(epochs):
             }
             result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
             reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
+
+            agent_state = next_state
             ep_reward += reward
             num_steps += 1
         ep_rewards += ep_reward
-    print("Episode reward: ", ep_rewards / eval_episodes)
+    print(f"Episode reward: {ep_rewards.item() / eval_episodes:.2f}")
 
 
 

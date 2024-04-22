@@ -74,8 +74,10 @@ def make_global_navigation_tasks(num_tasks=100):
     def done_fn(dataset, goal):
         return (
             boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
-            | goal_pos_done(dataset, goal, 0.1)
-            | goal_vel_done(dataset, np.zeros_like(goal), 0.1)
+            | (
+                goal_pos_done(dataset, goal, 0.1)
+                & goal_vel_done(dataset, np.zeros_like(goal), 0.1)
+            )
         )
     
     reward_kwargs = {"goal": np.array(goals)}
