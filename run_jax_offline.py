@@ -2,15 +2,15 @@ import jax
 import jax.numpy as jnp
 import equinox as eqx
 import optax
+import h5py
 import tqdm
 
 from modules import GeneralQNetwork, greedy_policy
 from losses import update_general_qnet, update_qnet
 from dataset import dataset_from_csv, replay_buffer_from_csv
-import tasks
 
 seed = 0
-batch_size = 128
+batch_size = 2
 tau = jnp.array(1 / 200)
 num_agents = 1
 num_envs = 128
@@ -37,35 +37,12 @@ q_function = GeneralQNetwork(obs_size=5, task_size=1024, act_size=9, config=q_co
 q_target = GeneralQNetwork(obs_size=5, task_size=1024, act_size=9, config=q_config, key=key)
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
-buffer, bufstate = replay_buffer_from_csv(
-    [
-        "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-        "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-        "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
-    ],
-    batch_size
-)
-datasets = [
-  "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
-]
-data, data_size = dataset_from_csv(datasets)
-
-all_tasks = tasks.make_global_navigation_tasks(3)
-# "task_string": task_strings,
-# "task_embedding": task_embeddings,
-# "reward_function": reward_fn,
-# "reward_kwargs": reward_kwargs
-
-reward_fn = all_tasks['reward_function']
-data_with_rewards = tasks.compute_rewards(data, all_tasks)
+dataset_with_str = h5py.File("dataset.h5", "r")
+dataset = {k: v for k,v in dataset_with_str.items() if k != 'task_string'} 
+data_size = dataset['next_reward'].shape[0]
 
 # B, num_goals, S
-keys = jax.random.split(jax.random.PRNGKey(0), data_with_rewards['next_reward'].shape[:-1]).reshape(*data_with_rewards['next_reward'].shape[:-1], -1)
-test = eqx.filter_vmap(eqx.filter_vmap(q_function))(data_with_rewards['state'], data_with_rewards['task_embedding'], keys)
-
-test_data = {k: v[:10] for k, v in data_with_rewards.items()}
+test_data = {k: v[:10] for k, v in dataset.items()}
 _, _, td_error, qvalue = update_general_qnet(q_function, q_target, test_data, opt, opt_state, gamma, tau, key)
 
 
@@ -77,14 +54,15 @@ _, _, td_error, qvalue = update_general_qnet(q_function, q_target, test_data, op
 td_error = jnp.array([jnp.inf])
 
 num_batches = (data_size + batch_size - 1) // batch_size
-pbar = tqdm.tqdm(total=num_batches)
 for epoch in range(epochs):
-    #key, buffer_key, train_key = jax.random.split(key, 3)
-
+    pbar = tqdm.tqdm(total=num_batches)
     for i in range(num_batches):
         start_idx = i * batch_size
         end_idx = min((i + 1) * batch_size, data_size)
-        data_batch = {k: v[start_idx:end_idx] for k, v in data_with_rewards.items()}
+        data_batch = {
+            k: v[0:1] if k == "task_embedding" else v[start_idx:end_idx] 
+            for k, v in dataset.items()
+        }
 
         key, _ = jax.random.split(key)
         q_function, q_target, td_error, qvalue = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, gamma, tau, key)

@@ -73,7 +73,7 @@ def policy_loss(policy, q_network, tape, key):
     return -q_value
 
 def mean_reduce(fn, *args, **kwargs):
-    """Given a tree of gradients produced by fn with dims [Batch, Agent, Params],
+    """Given a tree of gradients produced by fn with dims [Batch, Task, Params],
     reduce the gradient tree via mean to [Params].
     
     fn should be wrapped in eqx.filter_value_and_grad or jax.value_and_grad
@@ -100,16 +100,78 @@ def update_qnet(q_network, q_target, tape, opt, opt_state, gamma, tau, key):
     return q_network, td_error, value
 
 
+def vmap_task(loss_fn):
+    return eqx.filter_vmap(
+        loss_fn, 
+        in_axes=(
+            # qnet
+            None, 
+            # qtarget
+            None,
+            # data, recall the shape is [Batch, Task, ...]
+            {
+                "action": None,
+                "next_reward": 0,
+                "next_done": 0,
+                "next_state": None,
+                "state": None,
+                "task_embedding": 0,
+            }, 
+            # gamma
+            None, 
+            # key
+            0,
+        )
+    ) 
+
+def vmap_batch(loss_fn):
+    return eqx.filter_vmap(
+        loss_fn, 
+        in_axes=(
+            # qnet
+            None, 
+            # qtarget
+            None,
+            # data, recall the shape is [Batch, Task, ...]
+            {
+                "action": 0,
+                "next_reward": 0,
+                "next_done": 0,
+                "next_state": 0,
+                "state": 0,
+                "task_embedding": None,
+            }, 
+            # gamma
+            None, 
+            # key
+            0,
+        )
+    ) 
+
 def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, key):
     """Updates the discrete Q network. This function will vmap over the task and batch dims."""
     loss_fn = eqx.filter_value_and_grad(general_critic_loss, has_aux=True)
     B = data['next_reward'].shape[0]
     A  = data['next_reward'].shape[1]
     keys = jax.random.split(key, B * A).reshape(B, A, -1)
+
+    # We keep the data with singleton dims to help understand which dims map to which axes
+    # but vmap does not handle singleton dims well, so we remove them here
+    # Squeeze out Task dims
+    data = {
+        k: v.squeeze(1) if k in ["state", "next_state", "action"] else v for k, v in data.items() 
+    }
+    # Squeeze out Batch dims
+    data = {
+        k: v.squeeze(0) if k in ["task_embedding"] else v for k, v in data.items()
+    }
+
+
     # loss_fn args: q_network, q_target, data, gamma, key
-    task_loss_fn = eqx.filter_vmap(loss_fn, in_axes=(None, None, 0, None, 0)) 
-    batch_loss_fn = eqx.filter_vmap(task_loss_fn, in_axes=(None, None, 0, None, 0))  
+    #print({k: v.shape for k, v in data.items()})
+    batch_loss_fn = vmap_batch(vmap_task(loss_fn))
     (value, td_error), grad = mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
+    #task_loss_fn(q_network, q_target, {k: v[0] for k, v in data.items()}, gamma, keys[0])
     updates, opt_state = opt.update(
         grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
     )

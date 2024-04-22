@@ -3,7 +3,8 @@ import random
 
 from angle_emb import AnglE
 import numpy as np
-from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N
+from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N, dataset_from_csv
+import h5py
 
 random.seed(0)
 
@@ -22,7 +23,7 @@ def make_silly_tasks():
         "sit like a mushroom and be a fun-guy.",
         "do what makes you happy."
     ]
-    emb = jnp.concatenate([llm.encode(t, to_numpy=True) for t in task_strings])
+    emb = np.concatenate([llm.encode(t, to_numpy=True) for t in task_strings])
     return {
         "task_string": task_strings,
         "task_embedding": emb,
@@ -64,19 +65,31 @@ def make_global_navigation_tasks(num_tasks=100):
         # Goal shape: [G, 2]
         # Output shape: [B, G]
         # TODO: Add boundary reward
-        return goal_pos_reward(dataset, goal) + 0.01 * goal_vel_reward(dataset, 0) #+ boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N)
+        return (
+            goal_pos_reward(dataset, goal) 
+            + 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
+            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+        )
+
+    def done_fn(dataset, goal):
+        return (
+            boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            | goal_pos_done(dataset, goal, 0.1)
+            | goal_vel_done(dataset, np.zeros_like(goal), 0.1)
+        )
     
-    reward_kwargs = {"goal": jnp.array(goals)}
+    reward_kwargs = {"goal": np.array(goals)}
     assert len(task_strings) == len(task_embeddings) == reward_kwargs["goal"].shape[0] == num_tasks
 
     return {
         "task_string": task_strings,
-        "task_embedding": jnp.concatenate(task_embeddings, axis=0),
+        "task_embedding": np.concatenate(task_embeddings, axis=0),
         "reward_function": reward_fn,
+        "done_function": done_fn,
         "reward_kwargs": reward_kwargs
     }
 
-def compute_rewards(dataset, reward_dict):
+def add_rewards_to_dataset(dataset, reward_dict):
     """Compute the cartesian product of transition tuples and rewards.
     
     In other words, compute each reward function for each (s, a, s') tuple.
@@ -84,6 +97,7 @@ def compute_rewards(dataset, reward_dict):
     Takes a dataset of shape [B, ...] and a reward dict of shape [G, ...]
 
     This should return an updated dataset of shape [B, G, ...], with new "reward" and "task string" keys.
+    Note that some values will be [B, 1, ...] or [1, G, ...] if they are constant across tasks or transitions.
     """
     # Compute dims
     B = dataset['state'].shape[0]
@@ -97,27 +111,38 @@ def compute_rewards(dataset, reward_dict):
     # TODO: Do not rely on goal, generalize
     stacked_goals = reward_dict["reward_kwargs"]["goal"].reshape(1, G, -1)
     stacked_rewards = reward_dict["reward_function"](stacked_dataset, stacked_goals).reshape(B, G, 1)
+    stacked_dones = reward_dict["done_function"](stacked_dataset, stacked_goals).reshape(B, G, 1)
+    stacked_task_embeddings = reward_dict["task_embedding"].reshape(1, G, -1)
     #assert stacked_rewards.shape == (B, G)
-
-
-    stacked_task_embeddings = jnp.repeat(jnp.array(reward_dict["task_embedding"]).reshape(1, G, -1), B, axis=0)
-
-    # Repeat dataset over each reward/task
-    stacked_dataset = {
-        k: jnp.repeat(v, G, axis=1)
-        for k, v in stacked_dataset.items()
-    }
 
     stacked_dataset.update({
         "next_reward": stacked_rewards,
         "task_embedding": stacked_task_embeddings,
-        "next_done": jnp.zeros(stacked_rewards.shape, dtype=bool)
+        "next_done": stacked_dones,
     })
+
     return stacked_dataset
     
 
 
-
+datasets = [
+  "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+]
+data, data_size = dataset_from_csv(datasets)
+tasks = make_global_navigation_tasks(100)
+reward_fn = tasks['reward_function']
+data_with_rewards = add_rewards_to_dataset(data, tasks)
+with h5py.File("dataset.h5", "w") as file:
+    file.create_dataset("state", data=data_with_rewards["state"])
+    file.create_dataset("action", data=data_with_rewards["action"])
+    file.create_dataset("next_state", data=data_with_rewards["next_state"])
+    file.create_dataset("next_reward", data=data_with_rewards["next_reward"])
+    file.create_dataset("next_done", data=data_with_rewards["next_done"])
+    file.create_dataset("task_embedding", data=data_with_rewards["task_embedding"])
+    file.create_dataset("task_string", data=tasks["task_string"], dtype=h5py.special_dtype(vlen=str))
+#file.create_dataset("task_strings", )
 
 #ALL_TASKS = make_global_navigation_tasks()
 #breakpoint()
