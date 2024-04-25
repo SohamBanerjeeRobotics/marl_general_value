@@ -66,9 +66,9 @@ def make_global_navigation_tasks(num_tasks=100):
         # Output shape: [B, G]
         # TODO: Add boundary reward
         return (
-            - goal_pos_reward(dataset, goal) 
-            - 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
-            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            relative_goal_pos_reward(dataset, goal) 
+            #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
+            - 10 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
     def done_fn(dataset, goal):
@@ -134,7 +134,7 @@ if __name__ == '__main__':
         "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
     ]
     data, data_size = dataset_from_csv(datasets)
-    tasks = make_global_navigation_tasks(100)
+    tasks = make_global_navigation_tasks(500)
     reward_fn = tasks['reward_function']
     data_with_rewards = add_rewards_to_dataset(data, tasks)
     with h5py.File("dataset.h5", "w") as file:
