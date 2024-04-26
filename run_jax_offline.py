@@ -107,7 +107,7 @@ for epoch in range(epochs):
             ep_reward += reward
             num_steps += 1
         ep_rewards += ep_reward
-        final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_tasks["reward_kwargs"]["goal"][i]))
+        final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_tasks["reward_kwargs"]["goal"][i]).item())
     print(f"Episode reward: {ep_rewards.item() / eval_episodes:.2f}, final dist {final_dists}")
 
 
