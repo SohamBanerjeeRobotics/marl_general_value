@@ -118,7 +118,7 @@ for epoch in range(config["epochs"]):
         }
         ep_reward = 0
         num_steps = 0
-        while not done and num_steps < 1000:
+        while not done and num_steps < 200:
             action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
             next_state = simulator(agent_state, action)
             reward_fn_inputs = {

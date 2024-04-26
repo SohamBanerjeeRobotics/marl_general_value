@@ -15,10 +15,10 @@ def boundary_reward(dataset, e_bounds, n_bounds):
 
 def boundary_done(dataset, e_bounds, n_bounds):
     return (
-        (dataset["next_state"][...,STATE_IDX["e_pos"]] < e_bounds[0]) 
-        |  (dataset["next_state"][...,STATE_IDX["e_pos"]] > e_bounds[1])
-        | (dataset["next_state"][...,STATE_IDX["n_pos"]] < n_bounds[0])
-        | (dataset["next_state"][...,STATE_IDX["n_pos"]] > n_bounds[1])
+        (dataset["state"][...,STATE_IDX["e_pos"]] < e_bounds[0]) 
+        |  (dataset["state"][...,STATE_IDX["e_pos"]] > e_bounds[1])
+        | (dataset["state"][...,STATE_IDX["n_pos"]] < n_bounds[0])
+        | (dataset["state"][...,STATE_IDX["n_pos"]] > n_bounds[1])
     )
 
 def speed_reward(dataset):
@@ -27,7 +27,7 @@ def speed_reward(dataset):
 
 def goal_pos_reward(dataset, goal_pos):
     """Reward for relative distance to goal"""
-    return np.sum((dataset["next_state"][...,STATE_IDX["pos"]] - goal_pos) ** 2, axis=-1)
+    return np.sum((dataset["state"][...,STATE_IDX["pos"]] - goal_pos) ** 2, axis=-1)
 
 def relative_goal_pos_reward(dataset, goal_pos):
     """Reward for taking a step in the correct direction"""
