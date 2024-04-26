@@ -90,7 +90,8 @@ def make_global_navigation_tasks(num_tasks=1_000):
 
     return {
         "task_string": task_strings,
-        "task_embedding": np.concatenate(task_embeddings, axis=0),
+        #"task_embedding": np.concatenate(task_embeddings, axis=0),
+        "task_embedding": np.stack(task_embeddings, axis=0),
         "reward_function": reward_fn,
         "done_function": done_fn,
         "reward_kwargs": reward_kwargs
