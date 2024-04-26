@@ -29,14 +29,14 @@ opt = optax.chain(
     optax.adamw(lr_schedule),
 )
 q_config = {
-    "mlp_size": 384,
-    "head_size": 384,
+    "mlp_size": 256,
+    "head_size": 256,
     "ensemble_size": 1,
     "dropout": 0.1,
 }
 
-q_function = GeneralQNetwork(obs_size=5, task_size=1024, act_size=9, config=q_config, key=key)
-q_target = GeneralQNetwork(obs_size=5, task_size=1024, act_size=9, config=q_config, key=key)
+q_function = GeneralQNetwork(obs_size=5, task_size=768, act_size=9, config=q_config, key=key)
+q_target = GeneralQNetwork(obs_size=5, task_size=768, act_size=9, config=q_config, key=key)
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
 dataset_with_str = h5py.File("dataset.h5", "r")

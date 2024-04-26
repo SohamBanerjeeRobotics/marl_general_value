@@ -1,7 +1,8 @@
 from rewards import *
 import random
 
-from angle_emb import AnglE
+#from angle_emb import AnglE
+from sentence_transformers import SentenceTransformer
 import numpy as np
 from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N, dataset_from_csv
 import h5py
@@ -9,8 +10,10 @@ import h5py
 random.seed(0)
 
 #prompt = "You are a holonomic wheeled robot in a multirobot system,"
-prompt = "You are holonomic robot in a multirobot system,"
-llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').cuda()
+prompt = "You are holonomic robot in a multirobot system."
+#llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu")
+#llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
 def make_silly_tasks():
     task_strings = [
@@ -32,31 +35,33 @@ def make_silly_tasks():
     }
 
 
-def make_global_navigation_tasks(num_tasks=100):
+def make_global_navigation_tasks(num_tasks=1_000):
     task_strings = []
     task_embeddings = []
     goals = []
+    eps = 0.05
     for i in range(num_tasks):
-        x = random.uniform(-1.95, 1.95)
-        y = random.uniform(-1.45, 1.45)
+        x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
+        y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
 
         command_strings = [
-            f"navigate to ({x:0.1f}, {y:0.1f}) in the global coordinate frame.",
-            f"find a way to the global coordinates ({x:0.3f}, {y:0.3f}).",
-            f"get to ({x:0.1f}, {y:0.1f}).",
-            f"you must find your way to ({x:0.3f}, {y:0.3f}) in a global coordinate system.",
-            f"plan and execute a path to coordinates ({x:0.2f}, {y:0.2f}).",
-            f"your objective is to arrive at global coordinates ({x:0.3f}, {y:0.3f}). Execute your objective.",
-            f"proceed to the coordinates ({x:0.3f}, {y:0.3f}).",
-            f"move towards location ({x:0.3f}, {y:0.3f}) in the worldwide coordinate system.",
-            f"direct yourself to the coordinates ({x:0.3f}, {y:0.3f}) on the global map.",
-            f"travel to global position ({x:0.3f}, {y:0.3f}).",
-            f"advance to the position ({x:0.2f}, {y:0.2f}).",
+            f"Navigate to ({x:0.1f}, {y:0.1f}) in the global coordinate frame.",
+            f"Find a way to the global coordinates ({x:0.3f}, {y:0.3f}).",
+            f"Get to ({x:0.1f}, {y:0.1f}).",
+            f"You must find your way to ({x:0.3f}, {y:0.3f}) in a global coordinate system.",
+            f"Plan and execute a path to coordinates ({x:0.2f}, {y:0.2f}).",
+            f"Your objective is to arrive at global coordinates ({x:0.3f}, {y:0.3f}). Execute your objective.",
+            f"Proceed to the coordinates ({x:0.3f}, {y:0.3f}).",
+            f"Move towards location ({x:0.3f}, {y:0.3f}) in the worldwide coordinate system.",
+            f"Direct yourself to the coordinates ({x:0.3f}, {y:0.3f}) on the global map.",
+            f"Travel to global position ({x:0.3f}, {y:0.3f}).",
+            f"Advance to the position ({x:0.2f}, {y:0.2f}).",
         ]
         idx = random.randint(0, len(command_strings) - 1)
         task_str = f"{prompt} {command_strings[idx]}"
         task_strings.append(task_str)
-        emb = llm.encode(task_str, to_numpy=True)
+        #emb = llm.encode(task_str, to_numpy=True)
+        emb = llm.encode(task_str)
         task_embeddings.append(emb)
         goals.append((x, y))
 

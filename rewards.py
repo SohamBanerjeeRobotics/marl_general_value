@@ -1,7 +1,6 @@
 """This file contains a bunch of reward functions that we use to generate reward labels for the offline dataset"""
 
 import numpy as np
-import jax
 
 from dataset import STATE_IDX
 
