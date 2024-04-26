@@ -118,6 +118,13 @@ def augment_dataset(dataset, size, augment_size, key, eps=1e-4):
     data = {k: jnp.concatenate([v, augment[k]], axis=0)for k, v in dataset.items()}
     return data, size + augment_size
 
+def filter_out_of_bounds(df):
+    """Remove transitions where previous state is out of bounds."""
+    return df[
+        df['prev_state.pe'].between(ARENA_BOUNDS_E[0], ARENA_BOUNDS_E[1]) &
+        df['prev_state.pn'].between(ARENA_BOUNDS_N[0], ARENA_BOUNDS_N[1])
+    ]
+
 def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, jax.Array]:
     """Load dataset from CSV."""
     datas = []
@@ -125,6 +132,7 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
     key = jax.random.PRNGKey(0)
     for path in paths:
         df = pd.read_csv(path)
+        df = filter_out_of_bounds(df)
         data = {
             "state": np.stack([
                 df['prev_state.pe'], 
