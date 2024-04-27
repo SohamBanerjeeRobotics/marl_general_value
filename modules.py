@@ -64,8 +64,8 @@ class QHead(eqx.Module):
 
         self.post0 = Block(input_size, hidden_size, dropout, keys[0])
         self.post1 = Block(hidden_size, hidden_size, dropout, keys[1])
-        self.value = final_linear(keys[2], input_size, 1, scale=0.01)
-        self.advantage = final_linear(keys[3], input_size, output_size, scale=0.01)
+        self.value = final_linear(keys[2], hidden_size, 1, scale=0.01)
+        self.advantage = final_linear(keys[3], hidden_size, output_size, scale=0.01)
 
     def __call__(self, x, key):
         T = x.shape[0]
@@ -80,15 +80,11 @@ class QHead(eqx.Module):
 
 class GeneralQNetwork(eqx.Module):
     config: Dict[str, Any]
-    torso0: Block
-    torso1: Block
     q: eqx.Module
 
     def __init__(self, obs_size, task_size, act_size, config, key):
         self.config = config
         keys = random.split(key, 3)
-        self.torso0 = Block(obs_size + task_size, config["mlp_size"], 0, keys[0])
-        self.torso1 = Block(config["mlp_size"], config["mlp_size"], 0, keys[1])
 
         self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
                     
