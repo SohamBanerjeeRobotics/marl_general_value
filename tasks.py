@@ -13,8 +13,8 @@ random.seed(0)
 prompt = "Agent 0,"
 #llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu")
 #llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-llm = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True)
-#llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+#llm = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True)
+llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
 def make_silly_tasks():
     task_strings = [
