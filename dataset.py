@@ -153,7 +153,7 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
         data = {k: v[1:] for k, v in data.items()}
 
         key, _ = jax.random.split(key)
-        augment_size = data['state'].shape[0] // 8 # Double null action
+        augment_size = data['state'].shape[0] # Double null action
         data, size = augment_dataset(data, size, augment_size, key)
         size += len(df) - 1
         # Augment with data where the agent is not moving
