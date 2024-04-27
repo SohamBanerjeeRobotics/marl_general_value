@@ -10,7 +10,7 @@ import h5py
 random.seed(0)
 
 #prompt = "You are a holonomic wheeled robot in a multirobot system,"
-prompt = "You are a holonomic robot in a multirobot system."
+prompt = "Agent 0,"
 #llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu")
 llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 #llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
@@ -51,7 +51,7 @@ def make_navigation_goals_and_embeddings(num_tasks=1_000):
             # f"You must find your way to ({x:0.3f}, {y:0.3f}) in a global coordinate system.",
             # f"Plan and execute a path to coordinates ({x:0.2f}, {y:0.2f}).",
             # f"Your objective is to arrive at global coordinates ({x:0.3f}, {y:0.3f}). Execute your objective.",
-            f"Proceed to the coordinates ({x:0.3f}, {y:0.3f}).",
+            f"proceed to the coordinates ({x:0.3f}, {y:0.3f})",
             # f"Move towards location ({x:0.3f}, {y:0.3f}) in the worldwide coordinate system.",
             # f"Direct yourself to the coordinates ({x:0.3f}, {y:0.3f}) on the global map.",
             # f"Travel to global position ({x:0.3f}, {y:0.3f}).",
