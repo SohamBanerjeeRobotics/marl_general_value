@@ -23,8 +23,8 @@ config = {
     "batch_size": 1,
     "tau": jnp.array([1/200]),
     "epsilon": jnp.array([0.2]),
-    "num_envs": 4096,
-    "random_epochs": 500,
+    "num_envs": 8,
+    "random_epochs": 100,
     "eval_num_envs": 16,
     "eval_timesteps": 400,
     "eval_interval": 100,
@@ -107,6 +107,7 @@ for epoch in range(config["epochs"]):
     # TODO: We should have a last_episode_reward matrix that we update so we have a
     # mean return for each timestep
     transitions, cstate = eqx.filter_jit(collector)(q_function, cstate, epsilon_greedy_policy, config["epsilon"], collect_key)
+    print(cstate['action'])
 
     q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_simple)(q_function, q_target, transitions, opt, opt_state, config["gamma"], config["tau"], key)
     out_str = (

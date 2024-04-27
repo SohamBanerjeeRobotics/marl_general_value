@@ -77,23 +77,23 @@ def make_global_navigation_tasks(num_tasks=1_000):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.05
+    eps = 0.3
     for i in range(num_tasks):
         x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
         y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
 
         command_strings = [
-            # f"Navigate to ({x:0.1f}, {y:0.1f}) in the global coordinate frame.",
-            # f"Find a way to the global coordinates ({x:0.3f}, {y:0.3f}).",
+            f"Navigate to ({x:0.1f}, {y:0.1f}) in the global coordinate frame.",
+            f"Find a way to the global coordinates ({x:0.3f}, {y:0.3f}).",
             f"Get to ({x:0.1f}, {y:0.1f}).",
-            # f"You must find your way to ({x:0.3f}, {y:0.3f}) in a global coordinate system.",
-            # f"Plan and execute a path to coordinates ({x:0.2f}, {y:0.2f}).",
-            # f"Your objective is to arrive at global coordinates ({x:0.3f}, {y:0.3f}). Execute your objective.",
-            # f"Proceed to the coordinates ({x:0.3f}, {y:0.3f}).",
-            # f"Move towards location ({x:0.3f}, {y:0.3f}) in the worldwide coordinate system.",
-            # f"Direct yourself to the coordinates ({x:0.3f}, {y:0.3f}) on the global map.",
-            # f"Travel to global position ({x:0.3f}, {y:0.3f}).",
-            # f"Advance to the position ({x:0.2f}, {y:0.2f}).",
+            f"You must find your way to ({x:0.3f}, {y:0.3f}) in a global coordinate system.",
+            f"Plan and execute a path to coordinates ({x:0.2f}, {y:0.2f}).",
+            f"Your objective is to arrive at global coordinates ({x:0.3f}, {y:0.3f}). Execute your objective.",
+            f"Proceed to the coordinates ({x:0.3f}, {y:0.3f}).",
+            f"Move towards location ({x:0.3f}, {y:0.3f}) in the worldwide coordinate system.",
+            f"Direct yourself to the coordinates ({x:0.3f}, {y:0.3f}) on the global map.",
+            f"Travel to global position ({x:0.3f}, {y:0.3f}).",
+            f"Advance to the position ({x:0.2f}, {y:0.2f}).",
         ]
         idx = random.randint(0, len(command_strings) - 1)
         task_str = f"{prompt} {command_strings[idx]}"
