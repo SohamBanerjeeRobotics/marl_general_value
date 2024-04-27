@@ -132,7 +132,6 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
     key = jax.random.PRNGKey(0)
     for path in paths:
         df = pd.read_csv(path)
-        df = filter_out_of_bounds(df)
         data = {
             "state": np.stack([
                 df['prev_state.pe'], 

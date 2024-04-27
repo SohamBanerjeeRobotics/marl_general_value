@@ -5,7 +5,7 @@ import optax
 import tqdm
 import pandas as pd
 from modules import Block
-from dataset import dataset_from_csv, split_dataset, ACTION_IDX
+from dataset import dataset_from_csv, split_dataset, ACTION_IDX, ARENA_BOUNDS_E, ARENA_BOUNDS_N
 
 
 class StateTransitionModel(eqx.Module):
@@ -33,6 +33,15 @@ class StateTransitionModel(eqx.Module):
     one_hot_action = jax.nn.one_hot(action, self.num_actions)
     pred_next_state = state + self.mlp(jnp.concatenate([state, one_hot_action], axis=-1))
     return pred_next_state
+
+  def initial_state(self, key):
+    keys = jax.random.split(key, 5)
+    return jnp.concatenate([
+      jax.random.uniform(keys[0], shape=(1,), minval=ARENA_BOUNDS_E[0], maxval=ARENA_BOUNDS_E[1]),
+      jax.random.uniform(keys[1], shape=(1,), minval=ARENA_BOUNDS_N[0], maxval=ARENA_BOUNDS_N[1]),
+      jnp.zeros((3,))
+    ])
+
 
 if __name__ == '__main__':
   print(ACTION_IDX)

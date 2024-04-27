@@ -221,3 +221,12 @@ def greedy_policy(
     q_values = q_network(x, task, key=key)
     action = jnp.argmax(q_values)
     return action
+
+def epsilon_greedy_policy(
+    q_network, x, task, epsilon, key=None,
+):
+    q_values = q_network(x, task, key=key)
+    rand_action = random.randint(key, (1,), 0, q_values.shape[0])
+    mask = random.uniform(key) < epsilon
+    action = rand_action * mask + jnp.argmax(q_values) * ~mask
+    return action.squeeze(0)
