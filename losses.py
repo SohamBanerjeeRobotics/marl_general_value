@@ -29,7 +29,7 @@ def general_critic_loss(q_network, q_target, data, gamma, key):
 
     next_q = jax.lax.stop_gradient(q_target(
         data["next_state"], data["task_embedding"], key=key
-    )).max()
+    )).mean()
 
     target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
     error = q_value - target

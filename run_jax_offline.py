@@ -20,8 +20,7 @@ config = {
     "gamma": jnp.array([0.99]),
     "batch_size": 1,
     "tau": jnp.array([1/200]),
-    "num_envs": 128,
-    "epochs": 20,
+    "epochs": 100,
     "eval_episodes": 10,
     "q_config": {
         "mlp_size": 256,
