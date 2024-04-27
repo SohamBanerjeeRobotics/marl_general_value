@@ -12,8 +12,8 @@ random.seed(0)
 #prompt = "You are a holonomic wheeled robot in a multirobot system,"
 prompt = "You are a holonomic robot in a multirobot system."
 #llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu")
-#llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
-llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
+#llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
 def make_silly_tasks():
     task_strings = [
@@ -178,7 +178,7 @@ if __name__ == '__main__':
         "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
     ]
     data, data_size = dataset_from_csv(datasets)
-    tasks = make_global_navigation_tasks(2_000)
+    tasks = make_global_navigation_tasks(3_000)
     reward_fn = tasks['reward_function']
     data_with_rewards = add_rewards_to_dataset(data, tasks)
     with h5py.File("dataset.h5", "w") as file:

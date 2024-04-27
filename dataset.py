@@ -95,20 +95,22 @@ def test_action_to_discrete():
     discrete_actions = jax.vmap(action_to_discrete, in_axes=(0, None))(actions_batch, 0.1)
     assert discrete_actions == jnp.arange(9)
 
-def augment_dataset(dataset, size, augment_size, key, eps=1e-4):
+def augment_dataset(dataset, size, augment_size, key, eps=0.01):
     """Augment the dataset with additional zero-velocity data."""
     keys = jax.random.split(key, 8)
+    e_state = jax.random.uniform(keys[0], shape=(augment_size,), minval=ARENA_BOUNDS_E[0], maxval=ARENA_BOUNDS_E[1])
+    n_state = jax.random.uniform(keys[1], shape=(augment_size,), minval=ARENA_BOUNDS_N[0], maxval=ARENA_BOUNDS_N[1])
     augment = {
         "state": np.stack([
-            jax.random.uniform(keys[0], shape=(augment_size,), minval=ARENA_BOUNDS_E[0], maxval=ARENA_BOUNDS_E[1]),
-            jax.random.uniform(keys[1], shape=(augment_size,), minval=ARENA_BOUNDS_N[0], maxval=ARENA_BOUNDS_N[1]),
+            e_state,
+            n_state,
             jax.random.normal(keys[2], shape=(augment_size,),) * eps, 
             jax.random.normal(keys[3], shape=(augment_size,),) * eps, 
             jax.random.normal(keys[4], shape=(augment_size,),) * eps, 
         ], axis=1),
         "next_state": np.stack([
-            jax.random.uniform(keys[0], shape=(augment_size,), minval=ARENA_BOUNDS_E[0], maxval=ARENA_BOUNDS_E[1]),
-            jax.random.uniform(keys[1], shape=(augment_size,), minval=ARENA_BOUNDS_N[0], maxval=ARENA_BOUNDS_N[1]),
+            e_state,
+            n_state,
             jax.random.normal(keys[5], shape=(augment_size,),) * eps, 
             jax.random.normal(keys[6], shape=(augment_size,),) * eps, 
             jax.random.normal(keys[7], shape=(augment_size,),) * eps, 
@@ -153,7 +155,7 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
         data = {k: v[1:] for k, v in data.items()}
 
         key, _ = jax.random.split(key)
-        augment_size = data['state'].shape[0] # Double null action
+        augment_size = data['state'].shape[0] // 8# Double null action
         data, size = augment_dataset(data, size, augment_size, key)
         size += len(df) - 1
         # Augment with data where the agent is not moving
@@ -167,6 +169,9 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
     
     data["action"] = jax.vmap(action_to_discrete, in_axes=(0, None))(data["action"], 0.1)
     data = {k: jnp.array(v, copy=False) for k, v in data.items()}
+    # Shuffle
+    p = jax.random.permutation(jax.random.PRNGKey(0), size)
+    data = {k: v[p] for k, v in data.items()}
     #plot_dataset_distribution(data)
     return data, size
 
