@@ -1,6 +1,7 @@
 from dynamics_model import StateTransitionModel
 import jax
 import jax.numpy as jnp
+import numpy as np
 import equinox as eqx
 import optax
 import h5py
@@ -105,6 +106,7 @@ for epoch in range(config["epochs"]):
     ep_rewards = 0
     eval_q_function = eqx.nn.inference_mode(q_function)
     final_dists = []
+    all_states = []
     for i in range(config["eval_episodes"]):
         agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
         done = False
@@ -117,6 +119,7 @@ for epoch in range(config["epochs"]):
         }
         ep_reward = 0
         num_steps = 0
+        states = []
         while not done and num_steps < 200:
             action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
             next_state = simulator(agent_state, action)
@@ -125,6 +128,7 @@ for epoch in range(config["epochs"]):
                 "action": action.reshape(1, -1),
                 "next_state": next_state.reshape(1, -1),
             }
+            states.append(agent_state)
             result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
             reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
 
@@ -132,10 +136,29 @@ for epoch in range(config["epochs"]):
             ep_reward += reward
             num_steps += 1
         ep_rewards += ep_reward
+        all_states.append(jnp.stack(states, axis=0))
         final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_tasks["reward_kwargs"]["goal"][i]).item())
+
+    video = []
+    for i, trajectory in enumerate(all_states):
+        frames = jnp.zeros((trajectory.shape[0], 64, 64, 3), dtype=jnp.uint8)
+        # boundaries roughly -2, 2
+        agent_idx = ((2 + trajectory[:, :2]) * 64 / 4).astype(jnp.int32)
+        agent_idx = jnp.concatenate([jnp.arange(agent_idx.shape[0]).reshape(-1,1), agent_idx], axis=1)
+        agent_color = jnp.array([255, 0, 0], dtype=jnp.uint8)
+        goal_color = jnp.array([0, 255, 0], dtype=jnp.uint8)
+        goal_idx = ((2 + eval_tasks["reward_kwargs"]["goal"][i]) * 64 / 4).astype(jnp.int32)
+        f, r, c = agent_idx.T
+        frames = frames.at[f, r, c].set(agent_color)
+        frames = frames.at[:, goal_idx[0], goal_idx[1]].set(goal_color)
+        video.append(frames)
+    video = jnp.concatenate(video, axis=0)
+    video = jnp.transpose(video, (0, 3, 1, 2))
+    video = wandb.Video(np.array(video))
     wandb.log({
         "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
         "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
+        "eval/video": video,
         "train/loss": td_error.mean(),
         "train/epoch": epoch,
         "train/q_value_mean": qvalue.mean(),
