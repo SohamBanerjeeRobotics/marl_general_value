@@ -86,7 +86,7 @@ class GeneralQNetwork(eqx.Module):
         self.config = config
         keys = random.split(key, 3)
 
-        self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
+        self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
                     
     def __call__(self, x, task, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
