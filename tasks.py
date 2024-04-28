@@ -68,7 +68,7 @@ def make_global_navigation_tasks(num_tasks=1_000):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.3
+    eps = 0.5
     for i in range(num_tasks):
         x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
         y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
@@ -90,6 +90,7 @@ def make_global_navigation_tasks(num_tasks=1_000):
         return (
             relative_goal_pos_reward(dataset, goal) 
             #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
+            + goal_pos_done(dataset, goal, 0.1)
             - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
@@ -157,7 +158,7 @@ if __name__ == '__main__':
         "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
     ]
     data, data_size = dataset_from_csv(datasets)
-    tasks = make_global_navigation_tasks(3_000)
+    tasks = make_global_navigation_tasks(2_000)
     reward_fn = tasks['reward_function']
     data_with_rewards = add_rewards_to_dataset(data, tasks)
     with h5py.File("dataset.h5", "w") as file:

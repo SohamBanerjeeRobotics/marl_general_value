@@ -120,7 +120,7 @@ for epoch in range(config["epochs"]):
         ep_reward = 0
         num_steps = 0
         states = []
-        while not done and num_steps < 200:
+        while not done and num_steps < 100:
             action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
             next_state = simulator(agent_state, action)
             reward_fn_inputs = {
@@ -154,7 +154,7 @@ for epoch in range(config["epochs"]):
         video.append(frames)
     video = jnp.concatenate(video, axis=0)
     video = jnp.transpose(video, (0, 3, 1, 2))
-    video = wandb.Video(np.array(video))
+    video = wandb.Video(np.array(video), fps=6)
     wandb.log({
         "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
         "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),

@@ -27,23 +27,30 @@ class Decoder(eqx.Module):
     l0: eqx.nn.Linear
     l1: eqx.nn.Linear
     l2: eqx.nn.Linear
+    l3: eqx.nn.Linear
+    l4: eqx.nn.Linear
 
     def __init__(self, emb_size):
         keys = jax.random.split(jax.random.PRNGKey(0), 4)
         hidden_size = 256
         self.l0 = Block(emb_size, hidden_size, 0, key=keys[0])
         self.l1 = Block(hidden_size, hidden_size, 0, key=keys[1])
-        self.l2 = eqx.nn.Linear(hidden_size, 2, key=keys[2])
+        self.l2 = Block(hidden_size, hidden_size, 0, key=keys[2])
+        self.l3 = Block(hidden_size, hidden_size, 0, key=keys[3])
+        self.l4 = eqx.nn.Linear(hidden_size, 2, key=keys[4])
 
     def __call__(self, embed):
         x = self.l0(embed)
         x = self.l1(x)
-        return self.l2(x)
+        x = self.l2(x)
+        x = self.l3(x)
+        return self.l4(x)
 
     def to_embedding(self, embed):
         x = self.l0(embed)
         x = self.l1(x)
-        return x
+        x = self.l2(x)
+        return self.l3(x)
 
 
 def loss_fn(model, emb, goal):

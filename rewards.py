@@ -33,9 +33,9 @@ def relative_goal_pos_reward(dataset, goal_pos):
     """Reward for taking a step in the correct direction"""
     return np.sum(
         # Distance to goal before
-        ((dataset["state"][...,STATE_IDX["pos"]] - goal_pos) ** 2
+        np.abs((dataset["state"][...,STATE_IDX["pos"]] - goal_pos)
         # Distance to goal now
-        - (dataset["next_state"][...,STATE_IDX["pos"]] - goal_pos) ** 2), 
+        - np.abs(dataset["next_state"][...,STATE_IDX["pos"]] - goal_pos)), 
         axis=-1
     )
 
