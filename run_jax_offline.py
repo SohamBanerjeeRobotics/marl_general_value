@@ -29,12 +29,12 @@ config = {
         "ensemble_size": 1,
         "dropout": 0.0,
     },
-    "task_size": 384,
+    "task_size": 768,
     "obs_size": 5,
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
 }
-#wandb.init('morlmarl', config=config)
+wandb.init('morlmarl', config=config)
 
 key = jax.random.PRNGKey(config["seed"])
 
