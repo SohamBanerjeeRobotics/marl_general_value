@@ -68,7 +68,7 @@ def make_language_navigation_tasks(eval=False):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.5
+    eps = 0.75
 
     command_locs = {
         "west edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
