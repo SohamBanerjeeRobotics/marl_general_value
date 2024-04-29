@@ -140,7 +140,7 @@ def make_language_navigation_tasks(eval=False):
         "pathfind to the {}",
         "find your way to the {}",
         "go to the {}",
-        "find your way to the {}",
+        "move to the {}",
         "your goal is the {}"
     ]
     
