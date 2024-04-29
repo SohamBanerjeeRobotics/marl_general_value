@@ -175,7 +175,7 @@ for epoch in range(config["epochs"]):
             "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
             "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
             "eval/video": video,
-            "eval/best_return": best_eval
+            "eval/best_return": best_eval,
             "train/epoch": epoch,
         })
         
