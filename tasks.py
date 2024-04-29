@@ -68,7 +68,7 @@ def make_language_navigation_tasks(eval=False):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.75
+    eps = 0.5
 
     command_locs = {
         "west edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
@@ -124,16 +124,22 @@ def make_language_navigation_tasks(eval=False):
     })
     ne = {
             "north east corner": command_locs["east edge"] + command_locs["north edge"],
-            "east north corner": command_locs["east edge"] + command_locs["north edge"],
+            #"east north corner": command_locs["east edge"] + command_locs["north edge"],
 
             "north east region": command_locs["east edge"] + command_locs["north edge"],
-            "east north region": command_locs["east edge"] + command_locs["north edge"],
+            #"east north region": command_locs["east edge"] + command_locs["north edge"],
 
             "north east location": command_locs["east edge"] + command_locs["north edge"],
-            "east north location": command_locs["east edge"] + command_locs["north edge"],
+            #"east north location": command_locs["east edge"] + command_locs["north edge"],
 
             "north east boundary": command_locs["east edge"] + command_locs["north edge"],
-            "east north boundary": command_locs["east edge"] + command_locs["north edge"],
+            #"east north boundary": command_locs["east edge"] + command_locs["north edge"],
+
+            "north edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+            "east region": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
+            "south location": np.array([0, ARENA_BOUNDS_N[0] + eps]),
+            "west boundary": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+
         }
     string_permutations = [
         "navigate to the {}",
