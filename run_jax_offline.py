@@ -18,14 +18,15 @@ from tasks import add_rewards_to_dataset, make_global_navigation_tasks, make_lan
 config = {
     "seed": 0,
     "lr": 0.0001,
-    "gamma": jnp.array([0.99]),
-    "batch_size": 1,
-    "tau": jnp.array([1/200]),
-    "epochs": 100,
+    "gamma": jnp.array([0.95]),
+    "batch_size": 32,
+    "tau": jnp.array([1/1000]),
+    "epochs": 2000,
+    "eval_interval": 20,
     "eval_episodes": 1,
     "q_config": {
-        "mlp_size": 256,
-        "head_size": 256,
+        "mlp_size": 384,
+        "head_size": 384,
         "ensemble_size": 1,
         "dropout": 0.0,
     },
@@ -87,8 +88,8 @@ update_general_qnet(q_function, q_target, test_data, opt, opt_state, config["gam
 td_error = jnp.array([jnp.inf])
 
 num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
+pbar = tqdm.tqdm(total=config["epochs"])
 for epoch in range(config["epochs"]):
-    pbar = tqdm.tqdm(total=num_batches)
     for i in range(num_batches):
         start_idx = i * config["batch_size"]
         end_idx = min((i + 1) * config["batch_size"], data_size)
@@ -99,73 +100,77 @@ for epoch in range(config["epochs"]):
 
         key, _ = jax.random.split(key)
         q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, config["gamma"], config["tau"], key)
-        out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
-        pbar.set_description(out_str)
-        pbar.update()
-
-    # Eval
-    ep_rewards = 0
-    eval_q_function = eqx.nn.inference_mode(q_function)
-    final_dists = []
-    all_states = []
-    for i in range(config["eval_episodes"]):
-        agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
-        done = False
-        eval_task = {
-            "task_string": eval_tasks["task_string"][i:i+1],
-            "task_embedding": eval_tasks["task_embedding"][i:i+1],
-            "reward_function": eval_tasks["reward_function"],
-            "done_function": eval_tasks["done_function"],
-            "reward_kwargs": {"goal": eval_tasks["reward_kwargs"]["goal"][i:i+1]},
-        }
-        ep_reward = 0
-        num_steps = 0
-        states = []
-        while not done and num_steps < 100:
-            action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
-            next_state = simulator(agent_state, action)
-            reward_fn_inputs = {
-                "state": agent_state.reshape(1, -1),
-                "action": action.reshape(1, -1),
-                "next_state": next_state.reshape(1, -1),
-            }
-            states.append(agent_state)
-            result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
-            reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
-
-            agent_state = next_state
-            ep_reward += reward
-            num_steps += 1
-        ep_rewards += ep_reward
-        all_states.append(jnp.stack(states, axis=0))
-        final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_tasks["reward_kwargs"]["goal"][i]).item())
-
-    video = []
-    for i, trajectory in enumerate(all_states):
-        frames = jnp.zeros((trajectory.shape[0], 64, 64, 3), dtype=jnp.uint8)
-        # boundaries roughly -2, 2
-        agent_idx = ((2 + trajectory[:, :2]) * 64 / 4).astype(jnp.int32)
-        agent_idx = jnp.concatenate([jnp.arange(agent_idx.shape[0]).reshape(-1,1), agent_idx], axis=1)
-        agent_color = jnp.array([255, 0, 0], dtype=jnp.uint8)
-        goal_color = jnp.array([0, 255, 0], dtype=jnp.uint8)
-        goal_idx = ((2 + eval_tasks["reward_kwargs"]["goal"][i]) * 64 / 4).astype(jnp.int32)
-        f, r, c = agent_idx.T
-        frames = frames.at[f, r, c].set(agent_color)
-        frames = frames.at[:, goal_idx[0], goal_idx[1]].set(goal_color)
-        video.append(frames)
-    video = jnp.concatenate(video, axis=0)
-    video = jnp.transpose(video, (0, 3, 1, 2))
-    video = wandb.Video(np.array(video), fps=6)
+    out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
+    pbar.set_description(out_str)
+    pbar.update()
     wandb.log({
-        "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
-        "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
-        "eval/video": video,
         "train/loss": td_error.mean(),
         "train/epoch": epoch,
         "train/q_value_mean": qvalue.mean(),
         "train/q_target_value_mean": qtarget_value.mean()
     })
-    print(f"Episode reward: {ep_rewards.item() / config['eval_episodes']:.2f}, final dist {jnp.mean(jnp.array(final_dists))}")
+
+    if epoch % config["eval_interval"] == 0:
+        # Eval
+        ep_rewards = 0
+        eval_q_function = eqx.nn.inference_mode(q_function)
+        final_dists = []
+        all_states = []
+        for i in range(config["eval_episodes"]):
+            agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
+            done = False
+            eval_task = {
+                "task_string": eval_tasks["task_string"][i:i+1],
+                "task_embedding": eval_tasks["task_embedding"][i:i+1],
+                "reward_function": eval_tasks["reward_function"],
+                "done_function": eval_tasks["done_function"],
+                "reward_kwargs": {"goal": eval_tasks["reward_kwargs"]["goal"][i:i+1]},
+            }
+            ep_reward = 0
+            num_steps = 0
+            states = []
+            while not done and num_steps < 50:
+                action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
+                next_state = simulator(agent_state, action)
+                reward_fn_inputs = {
+                    "state": agent_state.reshape(1, -1),
+                    "action": action.reshape(1, -1),
+                    "next_state": next_state.reshape(1, -1),
+                }
+                states.append(agent_state)
+                result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
+                reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
+
+                agent_state = next_state
+                ep_reward += reward
+                num_steps += 1
+            ep_rewards += ep_reward
+            all_states.append(jnp.stack(states, axis=0))
+            final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_tasks["reward_kwargs"]["goal"][i]).item())
+
+        video = []
+        for i, trajectory in enumerate(all_states):
+            frames = jnp.zeros((trajectory.shape[0], 64, 64, 3), dtype=jnp.uint8)
+            # boundaries roughly -2, 2
+            agent_idx = ((2 + trajectory[:, :2]) * 64 / 4).astype(jnp.int32)
+            agent_idx = jnp.concatenate([jnp.arange(agent_idx.shape[0]).reshape(-1,1), agent_idx], axis=1)
+            agent_color = jnp.array([255, 0, 0], dtype=jnp.uint8)
+            goal_color = jnp.array([0, 255, 0], dtype=jnp.uint8)
+            goal_idx = ((2 + eval_tasks["reward_kwargs"]["goal"][i]) * 64 / 4).astype(jnp.int32)
+            f, r, c = agent_idx.T
+            frames = frames.at[f, r, c].set(agent_color)
+            frames = frames.at[:, goal_idx[0], goal_idx[1]].set(goal_color)
+            video.append(frames)
+        video = jnp.concatenate(video, axis=0)
+        video = jnp.transpose(video, (0, 3, 1, 2))
+        video = wandb.Video(np.array(video), fps=6)
+        wandb.log({
+            "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
+            "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
+            "eval/video": video,
+            "train/epoch": epoch,
+        })
+        print(f"Episode reward: {ep_rewards.item() / config['eval_episodes']:.2f}, final dist {jnp.mean(jnp.array(final_dists))}")
 
 
 
