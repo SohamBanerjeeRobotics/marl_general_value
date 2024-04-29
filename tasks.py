@@ -89,7 +89,7 @@ def make_language_navigation_tasks(eval=False):
             "north east edge": command_locs["east edge"] + command_locs["north edge"],
         }
     if eval:
-        command_locs = ne 
+        command_locs = ne
     for c, goal in command_locs.items():
         # TODO: Show it works for coordinates, then train on N,S,E and show it works for west even if not trained?
         # TODO: Generate more data from simulator, can still be "offline"

@@ -18,10 +18,11 @@ from tasks import add_rewards_to_dataset, make_global_navigation_tasks, make_lan
 config = {
     "seed": 0,
     "lr": 0.0001,
+    "weight_decay": 0.0001,
     "gamma": jnp.array([0.95]),
     "batch_size": 32,
     "tau": jnp.array([1/1000]),
-    "epochs": 2000,
+    "epochs": 3000,
     "eval_interval": 20,
     "eval_episodes": 1,
     "q_config": {
@@ -42,7 +43,7 @@ key = jax.random.PRNGKey(config["seed"])
 lr_schedule = optax.constant_schedule(config["lr"])
 opt = optax.chain(
     #optax.clip_by_global_norm(config["train"]["gradient_scale"]),
-    optax.adamw(lr_schedule),
+    optax.adamw(lr_schedule, weight_decay=config["weight_decay"]),
 )
 
 q_function = GeneralQNetwork(
@@ -89,6 +90,7 @@ td_error = jnp.array([jnp.inf])
 
 num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
 pbar = tqdm.tqdm(total=config["epochs"])
+best_eval = -np.inf
 for epoch in range(config["epochs"]):
     for i in range(num_batches):
         start_idx = i * config["batch_size"]
@@ -164,13 +166,19 @@ for epoch in range(config["epochs"]):
         video = jnp.concatenate(video, axis=0)
         video = jnp.transpose(video, (0, 3, 1, 2))
         video = wandb.Video(np.array(video), fps=6)
+        eval_score = ep_rewards.item() / config['eval_episodes']
+        print(f"Episode reward: {eval_score:.2f}, final dist {jnp.mean(jnp.array(final_dists))}")
+        if eval_score > best_eval or eval_score > 2.8:
+            eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_score:0.2f}.eqx", q_function)
+            best_eval = eval_score
         wandb.log({
             "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
             "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
             "eval/video": video,
+            "eval/best_return": best_eval,
             "train/epoch": epoch,
         })
-        print(f"Episode reward: {ep_rewards.item() / config['eval_episodes']:.2f}, final dist {jnp.mean(jnp.array(final_dists))}")
+        
 
 
 
