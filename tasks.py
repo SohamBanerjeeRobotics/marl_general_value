@@ -68,7 +68,7 @@ def make_language_navigation_tasks(eval=False):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.5
+    eps = 0.75
 
     command_locs = {
         "west edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
@@ -86,7 +86,11 @@ def make_language_navigation_tasks(eval=False):
             "north east edge": command_locs["east edge"] + command_locs["north edge"],
         }
     if eval:
-        command_locs = ne
+        command_locs = ne + {
+
+            #"north edge": np.array([0, ARENA_BOUNDS_N[1] - eps]),
+            #"east edge": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
+        }
     else:
         command_locs.update(ne)
     for c, goal in command_locs.items():
@@ -136,7 +140,7 @@ def make_global_navigation_tasks(num_tasks=1_000):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.5
+    eps = 0.75
     for i in range(num_tasks):
         x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
         y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
@@ -254,7 +258,7 @@ if __name__ == '__main__':
         "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
     ]
     data, data_size = dataset_from_csv(datasets)
-    tasks = make_global_navigation_tasks(100)
+    tasks = make_global_navigation_tasks(2_000)
     l_tasks = make_language_navigation_tasks()
     data_with_rewards = add_rewards_to_dataset(data, tasks)
     ldata_with_rewards = add_rewards_to_dataset(data, l_tasks)
