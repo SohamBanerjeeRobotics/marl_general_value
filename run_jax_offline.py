@@ -10,7 +10,7 @@ import wandb
 
 from modules import GeneralQNetwork, greedy_policy
 from losses import update_general_qnet
-from tasks import add_rewards_to_dataset, make_global_navigation_tasks
+from tasks import add_rewards_to_dataset, make_global_navigation_tasks, make_language_navigation_tasks
 
 
 
@@ -22,7 +22,7 @@ config = {
     "batch_size": 1,
     "tau": jnp.array([1/200]),
     "epochs": 100,
-    "eval_episodes": 10,
+    "eval_episodes": 1,
     "q_config": {
         "mlp_size": 256,
         "head_size": 256,
@@ -71,7 +71,8 @@ simulator = StateTransitionModel(
     key=jax.random.PRNGKey(0)
 )
 simulator = eqx.tree_deserialise_leaves(config["simulator_weights"], simulator)
-eval_tasks = make_global_navigation_tasks(config["eval_episodes"])
+#eval_tasks = make_global_navigation_tasks(config["eval_episodes"])
+eval_tasks = make_language_navigation_tasks(eval=True)
 
 # B, num_goals, S
 test_data = {k: v[:1] for k, v in dataset.items()}
