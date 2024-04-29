@@ -81,16 +81,10 @@ class QHead(eqx.Module):
 class GeneralQNetwork(eqx.Module):
     config: Dict[str, Any]
     q: eqx.Module
-    torso0: eqx.Module
-    torso1: eqx.Module
 
     def __init__(self, obs_size, task_size, act_size, config, key):
         self.config = config
-        keys = random.split(key, 3)
-        self.torso0 = Block(obs_size + task_size, config["mlp_size"], 0, keys[0])
-        self.torso1 = Block(config["mlp_size"], config["mlp_size"], 0, keys[1])
-
-        self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
+        self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], key)
                     
     def __call__(self, x, task, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
@@ -98,9 +92,6 @@ class GeneralQNetwork(eqx.Module):
         # Expects x to be of shape [S]
         net_keys = random.split(key, 3)
         x = jnp.concatenate([x, task])
-        #x = self.torso0(x, net_keys[0])
-        #x = self.torso1(x, net_keys[1])
-
         q = self.q(x, net_keys[2])
         return q
 
@@ -109,7 +100,6 @@ class GeneralQNetwork(eqx.Module):
 def greedy_policy(
     q_network, x, task, key=None
 ):
-    # Expand for ensemble
     q_values = q_network(x, task, key=key)
     action = jnp.argmax(q_values)
     return action
