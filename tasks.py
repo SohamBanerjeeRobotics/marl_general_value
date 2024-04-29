@@ -135,10 +135,10 @@ def make_language_navigation_tasks(eval=False):
             # "north east boundary": command_locs["east edge"] + command_locs["north edge"],
             # #"east north boundary": command_locs["east edge"] + command_locs["north edge"],
 
-            "north edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
-            "east edge": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
-            "south edge": np.array([0, ARENA_BOUNDS_N[0] + eps]),
-            "west edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+            "north edge": command_locs["north edge"],
+            "east edge": command_locs["east edge"],
+            "south edge": command_locs["south edge"],
+            "west edge": command_locs["west edge"],
 
         }
     string_permutations = [
