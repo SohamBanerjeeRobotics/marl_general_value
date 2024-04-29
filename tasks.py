@@ -86,11 +86,7 @@ def make_language_navigation_tasks(eval=False):
             "north east edge": command_locs["east edge"] + command_locs["north edge"],
         }
     if eval:
-        command_locs = ne + {
-
-            #"north edge": np.array([0, ARENA_BOUNDS_N[1] - eps]),
-            #"east edge": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
-        }
+        command_locs = ne 
     else:
         command_locs.update(ne)
     for c, goal in command_locs.items():
