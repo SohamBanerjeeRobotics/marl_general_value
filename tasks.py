@@ -77,13 +77,16 @@ def make_language_navigation_tasks(eval=False):
         "north edge": np.array([0, ARENA_BOUNDS_N[1] - eps]),
     }
     command_locs.update({
-        "southwest edge": command_locs["west edge"] + command_locs["south edge"],
-        "southeast edge": command_locs["east edge"] + command_locs["south edge"],
-        "northwest edge": command_locs["west edge"] + command_locs["north edge"],
+        "south west edge": command_locs["west edge"] + command_locs["south edge"],
+        "west south edge": command_locs["west edge"] + command_locs["south edge"],
+        "south east edge": command_locs["east edge"] + command_locs["south edge"],
+        "east south edge": command_locs["east edge"] + command_locs["south edge"],
+        "north west edge": command_locs["west edge"] + command_locs["north edge"],
+        "west north edge": command_locs["west edge"] + command_locs["north edge"],
         #"north east edge": command_locs["east edge"] + command_locs["north edge"],
     })
     ne = {
-            "northeast edge": command_locs["east edge"] + command_locs["north edge"],
+            "north east edge": command_locs["east edge"] + command_locs["north edge"],
         }
     if eval:
         command_locs = ne 
