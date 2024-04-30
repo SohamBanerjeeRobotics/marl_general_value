@@ -8,6 +8,7 @@ from typing import Dict, Any
 from modules import GeneralQNetwork, greedy_policy
 
 
+
 # Load embeddings and corresponding natural language commands
 mappings = pickle.loads(open('robomaster_control.pkl', "rb").read())
 # Convert action index to command
@@ -67,8 +68,9 @@ q_function = GeneralQNetwork(
     key=jax.random.PRNGKey(0)
 )
 #q_function = eqx.tree_deserialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_score:0.2f}.eqx", q_function)
- 
+q_function = eqx.tree_deserialise_leaves(f"models/ne-0-760-2.93.eqx", q_function)
 def policy_wrapper(state, task_embedding):
+
     action_idx = eqx.filter_jit(greedy_policy)(q_function, state, task_embedding, key=jax.random.PRNGKey(0))
     action_vel = ACTION_MAPPING[action_idx.item()]
     return action_vel
@@ -76,4 +78,4 @@ def policy_wrapper(state, task_embedding):
 # To map states and tasks to velocities, use policy wrapper
 # e.g., policy_wrapper(state_numpy_vec, mappings['Agent 0, navigate to the west edge'])
 # where state_numpy_vec is of shape 5: (e, n, ve, vn, yaw_angle)
-policy_wrapper(jnp.array([0, 0, 0, 0, 0]), mappings['Agent 0, navigate to the west edge'])
+# policy_wrapper(jnp.array([0, 0, 0, 0, 0]), mappings['Agent 0, navigate to the west edge'])
