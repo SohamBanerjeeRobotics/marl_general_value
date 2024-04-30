@@ -62,20 +62,20 @@ def action_to_discrete(actions, threshold=0.1):
     :return: An array of integers representing the discrete actions for the batch.
     """
     # Decompose actions into x and y components
-    x, y = actions[0], actions[1]
+    n, e = actions[0], actions[1]
     
     # Compute masks for each action based on the input conditions
-    not_x = (jnp.abs(x) < threshold)
-    not_y = (jnp.abs(y) < threshold)
-    no_op_mask = not_x & not_y
-    west_mask = (x < -threshold) & not_y
-    sw_mask = (x < -threshold) & (y < -threshold)
-    south_mask = not_x & (y < -threshold)
-    se_mask = (x > threshold) & (y < -threshold)
-    east_mask = (x > threshold) & not_y
-    ne_mask = (x > threshold) & (y > threshold)
-    north_mask = (y > threshold) & not_x
-    nw_mask = (x < -threshold) & (y > threshold)
+    not_n = (jnp.abs(n) < threshold)
+    not_e = (jnp.abs(e) < threshold)
+    no_op_mask = not_n & not_e
+    west_mask = (e < -threshold) & not_n
+    sw_mask = (e < -threshold) & (n < -threshold)
+    south_mask = not_e & (n < -threshold)
+    se_mask = (e > threshold) & (n < -threshold)
+    east_mask = (e > threshold) & not_n
+    ne_mask = (e > threshold) & (n > threshold)
+    north_mask = (n > threshold) & not_e
+    nw_mask = (e < -threshold) & (n > threshold)
 
     # Create an action score matrix where each row represents an action and each column represents a condition
     action_scores = jnp.stack([

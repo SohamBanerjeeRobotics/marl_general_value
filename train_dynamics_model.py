@@ -34,8 +34,6 @@ def multistep_integrator(state, action, next_state, length=10):
     state = jnp.concatenate([
       state[:, 0:2] + vel,
       vel,
-      state[:, 4:5], # yaw
-      #state[2:5]
     ], axis=-1)
     state = state[:-1]
     action = action[1:]
@@ -44,11 +42,11 @@ def multistep_integrator(state, action, next_state, length=10):
   return jnp.mean(0.5 * (state - next_state) ** 2), mae
 
 batch_size = 32
-epochs = 300
+epochs = 1_000
 key = jax.random.PRNGKey(0)
 key, model_key, data_key = jax.random.split(key, 3)
 #  TODO: Should include velocity
-model = StateTransitionModel(state_size=5, num_actions=9, dropout=0, key=model_key)
+model = StateTransitionModel(state_size=4, num_actions=9, dropout=0, key=model_key)
 
 datasets = [
   "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",

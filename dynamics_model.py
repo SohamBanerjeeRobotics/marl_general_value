@@ -45,7 +45,7 @@ class StateTransitionModel(eqx.Module):
 
 if __name__ == '__main__':
   print(ACTION_IDX)
-  model = StateTransitionModel(state_size=5, num_actions=9, dropout=0, key=jax.random.PRNGKey(0))
+  model = StateTransitionModel(state_size=4, num_actions=9, dropout=0, key=jax.random.PRNGKey(0))
   model = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", model)
   for action, idx in ACTION_IDX.items():
     print(f"action {action}: {model(jnp.array([1.0, 1.0, 0, 0, 0]), idx)}")
