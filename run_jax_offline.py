@@ -32,7 +32,7 @@ config = {
         "dropout": 0.0,
     },
     "task_size": 768,
-    "obs_size": 5,
+    "obs_size": 4,
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
 }

@@ -84,7 +84,9 @@ class GeneralQNetwork(eqx.Module):
 
     def __init__(self, obs_size, task_size, act_size, config, key):
         self.config = config
-        self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], key)
+        keys = random.split(key, 3)
+
+        self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
                     
     def __call__(self, x, task, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
@@ -96,10 +98,56 @@ class GeneralQNetwork(eqx.Module):
         return q
 
 
+class GraphLayer(eqx.Module):
+    W_root: nn.Linear
+    W_neighbor: nn.Linear
+
+    def __init__(self, input_size, output_size, key):
+        keys = random.split(key, 2)
+        self.W_root = nn.Linear(input_size, output_size, key=keys[0])
+        self.W_neighbor = nn.Linear(input_size, output_size, key=keys[1], use_bias=False)
+
+    def conv(self, root, neighbors):
+        return self.W_root(root) + self.W_neighbor(neighbors)
+
+    def __call__(self, x):
+        # x should be of shape [Num_agents, S]
+        assert x.ndim == 2, "x dim: {}".format(x.shape)
+        # Do not include self loops, as they are present in the root
+        # results in [ sum(1, 2), sum(0, 2), sum(0, 1) ]
+        neighbors = jnp.sum(x, axis=0) - x
+        return eqx.filter_vmap(self.conv)(x, neighbors)
+
+
+class GeneralMAQNetwork(eqx.Module):
+    config: Dict[str, Any]
+    gnn: GraphLayer
+    q: eqx.Module
+
+    def __init__(self, obs_size, task_size, act_size, config, key):
+        self.config = config
+        keys = random.split(key, 3)
+
+        self.gnn = GraphLayer(obs_size, config["mlp_size"], keys[0])
+        self.q = QHead(config["mlp_size"] + task_size, config["head_size"], act_size, config["dropout"], keys[2])
+
+                    
+    def __call__(self, x, task, key):
+        # x should be of shape [Num_agents, S]
+        # TODO: Should we do relative pos/vel here?
+        # We would need more memory (N^2) since neighbors would be different for each root
+        assert x.ndim == 2 and task.ndim == 1, "x dim: {}, task dim: {}".format(x.shape, task.shape)
+        net_keys = random.split(key, 3)
+        x = self.gnn(x)
+        breakpoint()
+        x = jnp.concatenate([x, jnp.repeat(task, x.shape[0], axis=0)], axis=1)
+        q = self.q(x, net_keys[2])
+        return q
 
 def greedy_policy(
     q_network, x, task, key=None
 ):
+    # Expand for ensemble
     q_values = q_network(x, task, key=key)
     action = jnp.argmax(q_values)
     return action
