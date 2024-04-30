@@ -11,20 +11,23 @@ import wandb
 from modules import GeneralQNetwork, greedy_policy
 from losses import update_general_qnet
 from tasks import add_rewards_to_dataset, make_global_navigation_tasks, make_language_navigation_tasks
+import argparse
 
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--seed", type=int, default=0)
+args = parser.parse_args()
 
 # opt setup
 config = {
-    "seed": 0,
+    "seed": args.seed,
     "lr": 0.0001,
     "weight_decay": 0.0001,
     "gamma": jnp.array([0.95]),
     "batch_size": 32,
     "tau": jnp.array([1/1000]),
     "epochs": 3000,
-    "eval_interval": 20,
-    "eval_episodes": 1,
+    "eval_interval": 50,
     "q_config": {
         "mlp_size": 384,
         "head_size": 384,
@@ -91,6 +94,7 @@ td_error = jnp.array([jnp.inf])
 num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
 pbar = tqdm.tqdm(total=config["epochs"])
 best_eval = -np.inf
+closest_eval = np.inf
 for epoch in range(config["epochs"]):
     for i in range(num_batches):
         start_idx = i * config["batch_size"]
@@ -118,7 +122,8 @@ for epoch in range(config["epochs"]):
         eval_q_function = eqx.nn.inference_mode(q_function)
         final_dists = []
         all_states = []
-        for i in range(config["eval_episodes"]):
+        num_eval_episodes = len(eval_tasks["task_string"])
+        for i in range(num_eval_episodes):
             agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
             done = False
             eval_task = {
@@ -132,7 +137,9 @@ for epoch in range(config["epochs"]):
             num_steps = 0
             states = []
             while not done and num_steps < 50:
-                action = greedy_policy(eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0))
+                action = greedy_policy(
+                    eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0)
+                )
                 next_state = simulator(agent_state, action)
                 reward_fn_inputs = {
                     "state": agent_state.reshape(1, -1),
@@ -165,17 +172,21 @@ for epoch in range(config["epochs"]):
             video.append(frames)
         video = jnp.concatenate(video, axis=0)
         video = jnp.transpose(video, (0, 3, 1, 2))
-        video = wandb.Video(np.array(video), fps=6)
-        eval_score = ep_rewards.item() / config['eval_episodes']
-        print(f"Episode reward: {eval_score:.2f}, final dist {jnp.mean(jnp.array(final_dists))}")
+        video = wandb.Video(np.array(video), fps=10)
+        eval_score = ep_rewards.item() / num_eval_episodes
+        eval_dists = jnp.mean(jnp.array(final_dists))
+        print(f"Episode reward: {eval_score:.2f}, final dist {eval_dists:.2f}")
+        closest_eval = min(eval_dists.item(), closest_eval)
         if eval_score > best_eval or eval_score > 2.8:
             eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_score:0.2f}.eqx", q_function)
+        if eval_score > best_eval:
             best_eval = eval_score
         wandb.log({
-            "eval/mean_return": ep_rewards.item() / config['eval_episodes'],
+            "eval/mean_return": eval_score,
             "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
             "eval/video": video,
             "eval/best_return": best_eval,
+            "eval/closest_distance": closest_eval,
             "train/epoch": epoch,
         })
         

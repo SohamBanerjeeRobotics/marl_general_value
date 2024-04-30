@@ -25,16 +25,44 @@ def general_critic_loss(q_network, q_target, data, gamma, key):
     """critic loss"""
     q_value = q_network(
         data["state"], data["task_embedding"], key=key
-    )[data["action"].squeeze(0)]
+    )
+    taken_q_value = q_value[data["action"]].squeeze(0)
 
     next_q = jax.lax.stop_gradient(q_target(
         data["next_state"], data["task_embedding"], key=key
     )).mean()
 
     target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
-    error = q_value - target
-    [td_error] = huber(error)
-    return td_error, (td_error, q_value, next_q)
+    error = taken_q_value - target.squeeze(0)
+    td_error = huber(error)
+    return td_error, (td_error, taken_q_value, next_q)
+
+def general_cql_loss(q_network, q_target, data, gamma, key):
+    """critic loss"""
+    q_value = q_network(
+        data["state"], data["task_embedding"], key=key
+    )
+    taken_q_value = q_value[data["action"]].squeeze(0)
+
+    next_action = jax.lax.stop_gradient(q_network(
+        data["next_state"], data["task_embedding"], key=key
+    ).argmax())
+
+    next_q = jax.lax.stop_gradient(q_target(
+        data["next_state"], data["task_embedding"], key=key
+    ))[next_action]
+
+#    uniform_weighting = 0.8 * (jnp.ones((num_actions,)) / num_actions)
+#    greedy_weighting = jnp.zeros((num_actions,)).at[next_action].set(0.2)
+#    weighting = uniform_weighting + greedy_weighting
+#
+#    next_q = jnp.sum(next_q * weighting)
+       
+    target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
+    error = taken_q_value - target.squeeze(0)
+    cql = jax.nn.logsumexp(q_value) - taken_q_value
+    td_error = huber(error) + 0.1 * cql
+    return td_error, (td_error, taken_q_value, next_q)
 
 
 def general_critic_loss_simple(q_network, q_target, data, gamma, key):
