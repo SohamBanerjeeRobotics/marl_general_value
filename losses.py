@@ -91,6 +91,17 @@ def mean_reduce(fn, *args, **kwargs):
     return outputs, reduced_grad
 
 
+def ma_mean_reduce(fn, *args, **kwargs):
+    """Given a tree of gradients produced by fn with dims [Batch, Task, Params],
+    reduce the gradient tree via mean to [Params].
+    
+    fn should be wrapped in eqx.filter_value_and_grad or jax.value_and_grad
+    """
+    outputs, grad = fn(*args, **kwargs)
+    reduced_grad = jax.tree_util.tree_map(lambda x: jnp.mean(x, axis=(0,1,2)), grad)
+    return outputs, reduced_grad
+
+
 def vmap_task(loss_fn):
     return eqx.filter_vmap(
         loss_fn, 
@@ -139,6 +150,30 @@ def vmap_batch(loss_fn):
         )
     ) 
 
+def vmap_agent(loss_fn):
+    return eqx.filter_vmap(
+        loss_fn, 
+        in_axes=(
+            # qnet
+            None, 
+            # qtarget
+            None,
+            # data, recall the shape is [Batch, Task, ...]
+            {
+                "action": 0,
+                "next_reward": 0,
+                "next_done": 0,
+                "next_state": 0,
+                "state": None,
+                "task_embedding": None,
+            }, 
+            # gamma
+            None, 
+            # key
+            0,
+        )
+    ) 
+
 def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, key):
     """Updates the discrete Q network. This function will vmap over the task and batch dims."""
     loss_fn = eqx.filter_value_and_grad(general_critic_loss, has_aux=True)
@@ -166,6 +201,43 @@ def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, k
     q_network = eqx.apply_updates(q_network, updates)
     q_target = soft_update(q_network, q_target, tau=tau)
     return q_network, q_target, td_error, q_value, q_target_value
+
+
+def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau, key):
+    """Updates the discrete Q network. This function will vmap over the task and batch dims."""
+    loss_fn = eqx.filter_value_and_grad(general_critic_loss, has_aux=True)
+    # [Batch, Task, Agent, *]
+    B, T, A = data['next_reward'].shape[:3]
+    keys = jax.random.split(key, B * T * A).reshape(B, T, A, -1)
+
+    # We keep the data with singleton dims to help understand which dims map to which axes
+    # but vmap does not handle singleton dims well, so we remove them here
+    # Squeeze out Task dims
+    data = {
+        k: v.squeeze(1) if k in ["state", "next_state", "action"] else v for k, v in data.items() 
+    }
+    # Squeeze out Batch dims, and give each agent a separate task
+    # TODO: What about reward...?
+    # Do we need to move agent dimension outside? There would be n! different task-agent permutations
+    # Agent and Task dims must be combined, as we take the product of all agents with all tasks
+    # Recall we are using a GNN, so do we care about permutations or the combination?
+    # We care as GNN is just for the input. The rewards and tasks matter which agent (position) they are in
+    # Easiest solution is to just sample reward/embedding pairs
+    data = {
+        k: jnp.tile(v.squeeze(0), (1, A, -1)) if k in ["task_embedding"] else v for k, v in data.items()
+    }
+
+    batch_loss_fn = vmap_batch(vmap_task(vmap_agent(loss_fn)))
+    breakpoint()
+    outputs, grad = ma_mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
+    _, (td_error, q_value, q_target_value) = outputs
+    updates, opt_state = opt.update(
+        grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)
+    )
+    q_network = eqx.apply_updates(q_network, updates)
+    q_target = soft_update(q_network, q_target, tau=tau)
+    return q_network, q_target, td_error, q_value, q_target_value
+
 
 
 def update_general_qnet_simple(q_network, q_target, data, opt, opt_state, gamma, tau, key):

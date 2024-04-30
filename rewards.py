@@ -1,10 +1,44 @@
 """This file contains a bunch of reward functions that we use to generate reward labels for the offline dataset"""
 
 import numpy as np
+import jax
+import jax.numpy as jnp
 
 from dataset import STATE_IDX
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
+def pairwise_distances(A):
+    assert A.ndim == 2
+    # Compute the squared norms of each row in A
+    norm = jnp.sum(jnp.square(A), axis=1)
+    # Compute the squared distances matrix using the formula
+    distances = norm[:, None] + norm[None, :] - 2 * jnp.dot(A, A.T)
+    # Since due to numerical issues, small negative numbers could appear, we use maximum to avoid NaNs in sqrt
+    distances = jnp.maximum(distances, 0.0)
+    # Take the square root to get the actual distances
+    distances = jnp.sqrt(distances)
+    # Do not compare distance to self
+    distances = distances + 100 * jnp.eye(A.shape[0])
+
+    return distances
+
+# TODO: We need to randomly sample for MA
+# but these rewards must be computed AFTER sampling
+def ma_collision_reward(dataset, safe_radius=0.3):
+    # Dataset shape: [agent, *]
+    # Reward shape: [agent, *]
+    #B, T, A, F = dataset['state'].shape
+    #state_in = dataset['state'].reshape(B, A, F)
+    return jnp.sum(pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0)
+
+def ma_collision_reward_wrapper(dataset, safe_radius=0.3, scale=1.0):
+    # Shape of dataset is [B, T, A, F]
+    B, T, A, F = dataset['state'].shape
+    state = {"state": dataset['state'].squeeze(1)}
+    reward = jax.vmap(ma_collision_reward, in_axes=(0, None))(state, safe_radius)
+    dataset['next_reward'] -= scale * reward.reshape(B, 1, A, 1)
+    return dataset
+
 
 
 # It is actually harder than expected to come up with reward functions given just the state
@@ -29,6 +63,7 @@ def goal_pos_reward(dataset, goal_pos):
     """Reward for relative distance to goal"""
     return np.sum((dataset["state"][...,STATE_IDX["pos"]] - goal_pos) ** 2, axis=-1)
 
+# TODO: Check this indexing is correct...
 def relative_goal_pos_reward(dataset, goal_pos):
     """Reward for taking a step in the correct direction"""
     return (
