@@ -75,31 +75,94 @@ def make_language_navigation_tasks(eval=False):
         "east edge": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
         "south edge": np.array([0, ARENA_BOUNDS_N[0] + eps]),
         "north edge": np.array([0, ARENA_BOUNDS_N[1] - eps]),
+
+        # "west region": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+        # "east region": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
+        # "south region": np.array([0, ARENA_BOUNDS_N[0] + eps]),
+        # "north region": np.array([0, ARENA_BOUNDS_N[1] - eps]),
+
+        # "west location": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+        # "east location": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
+        # "south location": np.array([0, ARENA_BOUNDS_N[0] + eps]),
+        # "north location": np.array([0, ARENA_BOUNDS_N[1] - eps]),
+
+        # "west boundary": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+        # "east boundary": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
+        # "south boundary": np.array([0, ARENA_BOUNDS_N[0] + eps]),
+        # "north boundary": np.array([0, ARENA_BOUNDS_N[1] - eps]),
     }
     command_locs.update({
-        "south west edge": command_locs["west edge"] + command_locs["south edge"],
-        "west south edge": command_locs["west edge"] + command_locs["south edge"],
-        "south east edge": command_locs["east edge"] + command_locs["south edge"],
-        "east south edge": command_locs["east edge"] + command_locs["south edge"],
-        "north west edge": command_locs["west edge"] + command_locs["north edge"],
-        "west north edge": command_locs["west edge"] + command_locs["north edge"],
-        #"north east edge": command_locs["east edge"] + command_locs["north edge"],
+        "south west corner": command_locs["west edge"] + command_locs["south edge"],
+        "west south corner": command_locs["west edge"] + command_locs["south edge"],
+        "south east corner": command_locs["east edge"] + command_locs["south edge"],
+        "east south corner": command_locs["east edge"] + command_locs["south edge"],
+        "north west corner": command_locs["west edge"] + command_locs["north edge"],
+        "west north corner": command_locs["west edge"] + command_locs["north edge"],
+
+        # "south west region": command_locs["west edge"] + command_locs["south edge"],
+        # "west south region": command_locs["west edge"] + command_locs["south edge"],
+        # "south east region": command_locs["east edge"] + command_locs["south edge"],
+        # "east south region": command_locs["east edge"] + command_locs["south edge"],
+        # "north west region": command_locs["west edge"] + command_locs["north edge"],
+        # "west north region": command_locs["west edge"] + command_locs["north edge"],
+
+        # "south west location": command_locs["west edge"] + command_locs["south edge"],
+        # "west south location": command_locs["west edge"] + command_locs["south edge"],
+        # "south east location": command_locs["east edge"] + command_locs["south edge"],
+        # "east south location": command_locs["east edge"] + command_locs["south edge"],
+        # "north west location": command_locs["west edge"] + command_locs["north edge"],
+        # "west north location": command_locs["west edge"] + command_locs["north edge"],
+
+        # "south west boundary": command_locs["west edge"] + command_locs["south edge"],
+        # "west south boundary": command_locs["west edge"] + command_locs["south edge"],
+        # "south east boundary": command_locs["east edge"] + command_locs["south edge"],
+        # "east south boundary": command_locs["east edge"] + command_locs["south edge"],
+        # "north west boundary": command_locs["west edge"] + command_locs["north edge"],
+        # "west north boundary": command_locs["west edge"] + command_locs["north edge"],
+        # #"north east edge": command_locs["east edge"] + command_locs["north edge"],
+        # #"east north edge": command_locs["east edge"] + command_locs["north edge"],
     })
     ne = {
-            "north east edge": command_locs["east edge"] + command_locs["north edge"],
+            "north east corner": command_locs["east edge"] + command_locs["north edge"],
+            #"east north corner": command_locs["east edge"] + command_locs["north edge"],
+
+            # "north east region": command_locs["east edge"] + command_locs["north edge"],
+            # #"east north region": command_locs["east edge"] + command_locs["north edge"],
+
+            # "north east location": command_locs["east edge"] + command_locs["north edge"],
+            # #"east north location": command_locs["east edge"] + command_locs["north edge"],
+
+            # "north east boundary": command_locs["east edge"] + command_locs["north edge"],
+            # #"east north boundary": command_locs["east edge"] + command_locs["north edge"],
+
+            "north edge": command_locs["north edge"],
+            "east edge": command_locs["east edge"],
+            "south edge": command_locs["south edge"],
+            "west edge": command_locs["west edge"],
+
         }
+    string_permutations = [
+        "navigate to the {}",
+        #"pathfind to the {}",
+        #"find your way to the {}",
+        #"go to the {}",
+        #"move to the {}",
+        #"your goal is the {}"
+    ]
+    
     if eval:
         command_locs = ne 
     for c, goal in command_locs.items():
+        for s in string_permutations:
         # TODO: Show it works for coordinates, then train on N,S,E and show it works for west even if not trained?
         # TODO: Generate more data from simulator, can still be "offline"
         # Make sure we handle the boundaries by staying in for one frame then resetting
 
-        task_str = f"{prompt} navigate to the {c}"
-        task_strings.append(task_str)
-        goals.append(goal)
+        #task_str = f"{prompt} navigate to the {c}"
+            task_str = f"{prompt} {s.format(c)}"
+            task_strings.append(task_str)
+            goals.append(goal)
     task_embeddings = llm.encode(task_strings)
-
     def reward_fn(dataset, goal):
         # Dataset shape: [B, 2]
         # Goal shape: [G, 2]
@@ -255,11 +318,11 @@ if __name__ == '__main__':
         "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
     ]
     data, data_size = dataset_from_csv(datasets)
-    tasks = make_global_navigation_tasks(2_000)
+    #tasks = make_global_navigation_tasks(2_000)
     l_tasks = make_language_navigation_tasks()
-    data_with_rewards = add_rewards_to_dataset(data, tasks)
-    ldata_with_rewards = add_rewards_to_dataset(data, l_tasks)
-    all_data_with_rewards = merge_reward_datasets([data_with_rewards, ldata_with_rewards])
+    #data_with_rewards = add_rewards_to_dataset(data, tasks)
+    all_data_with_rewards = add_rewards_to_dataset(data, l_tasks)
+    #all_data_with_rewards = merge_reward_datasets([data_with_rewards, ldata_with_rewards])
     with h5py.File("dataset.h5", "w") as file:
         file.create_dataset("state", data=all_data_with_rewards["state"])
         file.create_dataset("action", data=all_data_with_rewards["action"])
@@ -267,7 +330,7 @@ if __name__ == '__main__':
         file.create_dataset("next_reward", data=all_data_with_rewards["next_reward"])
         file.create_dataset("next_done", data=all_data_with_rewards["next_done"])
         file.create_dataset("task_embedding", data=all_data_with_rewards["task_embedding"])
-        file.create_dataset("task_string", data=tasks["task_string"] + l_tasks["task_string"], dtype=h5py.special_dtype(vlen=str))
+        file.create_dataset("task_string", data=l_tasks["task_string"], dtype=h5py.special_dtype(vlen=str))
 #file.create_dataset("task_strings", )
 
 #ALL_TASKS = make_global_navigation_tasks()
