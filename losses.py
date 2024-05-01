@@ -21,7 +21,45 @@ def soft_update(network, target, tau):
     target = eqx.tree_inference(target, True)
     return target
 
+def general_critic_weighted_loss(q_network, q_target, data, gamma, key):
+    """critic loss"""
+    q_value = q_network(
+        data["state"], data["task_embedding"], key=key
+    )
+    taken_q_value = q_value[data["action"]].squeeze(0)
+
+    next_q = jax.lax.stop_gradient(q_target(
+        data["next_state"], data["task_embedding"], key=key
+    ))
+    weighting = jax.nn.softmax(next_q)
+    #uniform_weighting = 0.8 * (jnp.ones((num_actions,)) / num_actions)
+    #greedy_weighting = jnp.zeros((num_actions,)).at[next_action].set(0.2)
+    #weighting = uniform_weighting + greedy_weighting
+
+    next_q = jnp.sum(next_q * weighting)
+
+    target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
+    error = taken_q_value - target.squeeze(0)
+    td_error = huber(error)
+    return td_error, (td_error, taken_q_value, next_q)
+
 def general_critic_loss(q_network, q_target, data, gamma, key):
+    """critic loss"""
+    q_value = q_network(
+        data["state"], data["task_embedding"], key=key
+    )
+    taken_q_value = q_value[data["action"]].squeeze(0)
+
+    next_q = jax.lax.stop_gradient(q_target(
+        data["next_state"], data["task_embedding"], key=key
+    )).max()
+
+    target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
+    error = taken_q_value - target.squeeze(0)
+    td_error = huber(error)
+    return td_error, (td_error, taken_q_value, next_q)
+
+def general_critic_mean_loss(q_network, q_target, data, gamma, key):
     """critic loss"""
     q_value = q_network(
         data["state"], data["task_embedding"], key=key
@@ -37,7 +75,7 @@ def general_critic_loss(q_network, q_target, data, gamma, key):
     td_error = huber(error)
     return td_error, (td_error, taken_q_value, next_q)
 
-def general_cql_loss(q_network, q_target, data, gamma, key):
+def general_cql_loss(q_network, q_target, data, gamma, key, alpha=0.2):
     """critic loss"""
     q_value = q_network(
         data["state"], data["task_embedding"], key=key
@@ -52,16 +90,10 @@ def general_cql_loss(q_network, q_target, data, gamma, key):
         data["next_state"], data["task_embedding"], key=key
     ))[next_action]
 
-#    uniform_weighting = 0.8 * (jnp.ones((num_actions,)) / num_actions)
-#    greedy_weighting = jnp.zeros((num_actions,)).at[next_action].set(0.2)
-#    weighting = uniform_weighting + greedy_weighting
-#
-#    next_q = jnp.sum(next_q * weighting)
-       
     target = data["next_reward"] + (1.0 - data["next_done"]) * gamma * next_q 
     error = taken_q_value - target.squeeze(0)
     cql = jax.nn.logsumexp(q_value) - taken_q_value
-    td_error = huber(error) + 0.1 * cql
+    td_error = huber(error) + alpha * cql
     return td_error, (td_error, taken_q_value, next_q)
 
 
@@ -174,9 +206,20 @@ def vmap_agent(loss_fn):
         )
     ) 
 
-def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, key):
+def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, loss_fn, key):
     """Updates the discrete Q network. This function will vmap over the task and batch dims."""
-    loss_fn = eqx.filter_value_and_grad(general_critic_loss, has_aux=True)
+    if loss_fn == "maxq":
+        loss_fn = general_critic_loss 
+    elif loss_fn == "meanq":
+        loss_fn = general_critic_mean_loss
+    elif loss_fn == "weighted":
+        loss_fn = general_critic_weighted_loss
+    elif loss_fn == "cql":
+        loss_fn = general_cql_loss
+    else:
+        raise Exception(f"Invalid loss fn {loss_fn}")
+    loss_fn = eqx.filter_value_and_grad(loss_fn, has_aux=True)
+
     B = data['next_reward'].shape[0]
     A  = data['next_reward'].shape[1]
     keys = jax.random.split(key, B * A).reshape(B, A, -1)
@@ -240,7 +283,7 @@ def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau
 
 
 
-def update_general_qnet_simple(q_network, q_target, data, opt, opt_state, gamma, tau, key):
+def update_general_qnet_simple(q_network, q_target, data, opt, opt_state, gamma, tau, loss_fn, key):
     """Updates the discrete Q network. This function will vmap over the task and batch dims."""
     loss_fn = eqx.filter_value_and_grad(general_critic_loss_simple, has_aux=True)
     B = data['next_reward'].shape[0]

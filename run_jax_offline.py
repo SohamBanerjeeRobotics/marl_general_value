@@ -10,7 +10,7 @@ import wandb
 
 from modules import GeneralQNetwork, greedy_policy
 from losses import update_general_qnet
-from tasks import add_rewards_to_dataset, make_global_navigation_tasks, make_language_navigation_tasks
+from tasks import add_rewards_to_dataset, make_language_navigation_tasks
 import argparse
 
 
@@ -22,6 +22,7 @@ args = parser.parse_args()
 config = {
     "seed": args.seed,
     "lr": 0.0001,
+    "loss": "meanq",
     "weight_decay": 0.0001,
     "gamma": jnp.array([0.95]),
     "batch_size": 32,
@@ -33,6 +34,8 @@ config = {
         "head_size": 384,
         "ensemble_size": 1,
         "dropout": 0.0,
+        "ensemble_size": 2,
+        "ensemble_reduce": "min",
     },
     "task_size": 768,
     "obs_size": 4,
@@ -66,7 +69,7 @@ q_target = GeneralQNetwork(
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
 dataset_with_str = h5py.File("dataset.h5", "r")
-dataset = {k: v for k,v in dataset_with_str.items() if k != 'task_string'} 
+dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_string'} 
 data_size = dataset['next_reward'].shape[0]
 
 simulator = StateTransitionModel(
@@ -81,7 +84,7 @@ eval_tasks = make_language_navigation_tasks(eval=True)
 
 # B, num_goals, S
 test_data = {k: v[:1] for k, v in dataset.items()}
-update_general_qnet(q_function, q_target, test_data, opt, opt_state, config["gamma"], config["tau"], key)
+update_general_qnet(q_function, q_target, test_data, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
 
 
 # TODO: Utilize negative reward for leaving boundaries
@@ -95,7 +98,7 @@ num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
 pbar = tqdm.tqdm(total=config["epochs"])
 best_eval = -np.inf
 closest_eval = np.inf
-for epoch in range(config["epochs"]):
+for epoch in range(1, config["epochs"]):
     for i in range(num_batches):
         start_idx = i * config["batch_size"]
         end_idx = min((i + 1) * config["batch_size"], data_size)
@@ -105,7 +108,7 @@ for epoch in range(config["epochs"]):
         }
 
         key, _ = jax.random.split(key)
-        q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, config["gamma"], config["tau"], key)
+        q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
     pbar.set_description(out_str)
     pbar.update()
@@ -116,7 +119,7 @@ for epoch in range(config["epochs"]):
         "train/q_target_value_mean": qtarget_value.mean()
     })
 
-    if epoch % config["eval_interval"] == 0:
+    if epoch % config["eval_interval"] == 0 or epoch == 1:
         # Eval
         ep_rewards = 0
         eval_q_function = eqx.nn.inference_mode(q_function)
@@ -124,7 +127,7 @@ for epoch in range(config["epochs"]):
         all_states = []
         num_eval_episodes = len(eval_tasks["task_string"])
         for i in range(num_eval_episodes):
-            agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
+            agent_state = jnp.array([0.0, 0.0, 0, 0])
             done = False
             eval_task = {
                 "task_string": eval_tasks["task_string"][i:i+1],
@@ -188,7 +191,7 @@ for epoch in range(config["epochs"]):
             "eval/best_return": best_eval,
             "eval/closest_distance": closest_eval,
             "train/epoch": epoch,
-        })
+        }, step=epoch)
         
 
 

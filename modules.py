@@ -81,21 +81,38 @@ class QHead(eqx.Module):
 class GeneralQNetwork(eqx.Module):
     config: Dict[str, Any]
     q: eqx.Module
+    reduce: callable
 
     def __init__(self, obs_size, task_size, act_size, config, key):
         self.config = config
-        keys = random.split(key, 3)
+        keys = jax.random.split(key)
 
-        self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
+        @eqx.filter_vmap
+        def make_heads(key):
+            return QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], key)
+                    
+        ensemble_keys = random.split(keys[0], config["ensemble_size"])
+        self.q = make_heads(ensemble_keys)
+
+        if config['ensemble_reduce'] == "median":
+            self.reduce = jnp.median
+        elif config['ensemble_reduce'] == "min":
+            self.reduce = jnp.min
+        else:
+            raise Exception("Invalid reduce")
                     
     def __call__(self, x, task, key):
         """Returns an ensemble of Q values of shape [ensemble, actions]"""
         assert x.ndim == 1 and task.ndim == 1, "x dim: {}, task dim: {}".format(x.shape, task.shape)
-        # Expects x to be of shape [S]
-        net_keys = random.split(key, 3)
+
+        @eqx.filter_vmap(in_axes=(eqx.if_array(0), None, None))
+        def ensemble(model, x, key):
+            return model(x, key=key)
+        
         x = jnp.concatenate([x, task])
-        q = self.q(x, net_keys[2])
-        return q
+        q = ensemble(self.q, x, key)
+        # Expects x to be of shape [S]
+        return self.reduce(q, axis=0)
 
 
 class GraphLayer(eqx.Module):
