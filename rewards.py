@@ -74,7 +74,11 @@ def relative_goal_pos_reward(dataset, goal_pos):
     )
 
 def goal_pos_done(dataset, goal_pos, threshold=0.1):
-    return goal_pos_reward(dataset, goal_pos) < threshold
+    #return goal_pos_reward(dataset, goal_pos) < threshold
+    return (
+        (np.sum((dataset["state"][...,STATE_IDX["pos"]] - goal_pos) ** 2, axis=-1) < threshold)
+        & (np.sum((dataset["next_state"][...,STATE_IDX["pos"]] - goal_pos) ** 2, axis=-1) < threshold)
+    )
 
 def goal_vel_reward(dataset, goal_vel):
     """Reward for relative velocity to goal"""

@@ -83,8 +83,8 @@ simulator = eqx.tree_deserialise_leaves(config["simulator_weights"], simulator)
 eval_tasks = make_language_navigation_tasks(eval=True)
 
 # B, num_goals, S
-test_data = {k: v[:1] for k, v in dataset.items()}
-update_general_qnet(q_function, q_target, test_data, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
+#test_data = {k: v[:1] for k, v in dataset.items()}
+#update_general_qnet(q_function, q_target, test_data, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
 
 
 # TODO: Utilize negative reward for leaving boundaries
@@ -127,7 +127,6 @@ for epoch in range(1, config["epochs"]):
         all_states = []
         num_eval_episodes = len(eval_tasks["task_string"])
         for i in range(num_eval_episodes):
-            agent_state = jnp.array([0.0, 0.0, 0, 0])
             done = False
             eval_task = {
                 "task_string": eval_tasks["task_string"][i:i+1],
@@ -136,12 +135,14 @@ for epoch in range(1, config["epochs"]):
                 "done_function": eval_tasks["done_function"],
                 "reward_kwargs": {"goal": eval_tasks["reward_kwargs"]["goal"][i:i+1]},
             }
+            # Opposite end 
+            agent_state = jnp.concatenate([-eval_task["reward_kwargs"]["goal"].squeeze(0), jnp.zeros(2)])
             ep_reward = 0
             num_steps = 0
             states = []
             while not done and num_steps < 50:
                 action = greedy_policy(
-                    eval_q_function, agent_state, eval_tasks["task_embedding"][i], key=jax.random.PRNGKey(0)
+                    eval_q_function, agent_state, eval_task["task_embedding"].squeeze(0), key=jax.random.PRNGKey(0)
                 )
                 next_state = simulator(agent_state, action)
                 reward_fn_inputs = {
@@ -158,7 +159,7 @@ for epoch in range(1, config["epochs"]):
                 num_steps += 1
             ep_rewards += ep_reward
             all_states.append(jnp.stack(states, axis=0))
-            final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_tasks["reward_kwargs"]["goal"][i]).item())
+            final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_task["reward_kwargs"]["goal"]).item())
 
         video = []
         for i, trajectory in enumerate(all_states):
