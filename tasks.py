@@ -153,7 +153,6 @@ def make_language_navigation_tasks(eval=False):
     
     if eval:
         command_locs = ne 
-        string_permutations = [string_permutations[0]]
     for c, goal in command_locs.items():
         for s in string_permutations:
         # TODO: Show it works for coordinates, then train on N,S,E and show it works for west even if not trained?
@@ -198,66 +197,66 @@ def make_language_navigation_tasks(eval=False):
         "reward_kwargs": reward_kwargs
     }
 
-# def make_global_navigation_tasks(num_tasks=1_000):
-#     task_strings = []
-#     task_embeddings = []
-#     goals = []
-#     eps = 0.5
-#     for i in range(num_tasks):
-#         x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
-#         y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
+def make_global_navigation_tasks(num_tasks=1_000):
+    task_strings = []
+    task_embeddings = []
+    goals = []
+    eps = 0.5
+    for i in range(num_tasks):
+        x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
+        y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
 
-#         command_strings = [
-#             f"navigate to ({x:0.2f}, {y:0.2f})",
-#         ]
-#         # TODO: Show it works for coordinates, then train on N,S,E and show it works for west even if not trained?
-#         # TODO: Generate more data from simulator, can still be "offline"
-#         # Make sure we handle the boundaries by staying in for one frame then resetting
-#         command_locs = {
-#             "west edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
-#             "south west corner": np.array([ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_N[0] + eps]),
-#             "west edge": ARENA_BOUNDS_E[1] - eps,
-#             "south edge": ARENA_BOUNDS_N[0] + eps,
-#             "north edge": ARENA_BOUNDS_N[1] - eps,
-#         }
-#         idx = random.randint(0, len(command_strings) - 1)
-#         task_str = f"{prompt} {command_strings[idx]}"
-#         task_strings.append(task_str)
-#         goals.append((x, y))
-#     task_embeddings = llm.encode(task_strings)
+        command_strings = [
+            f"navigate to ({x:0.2f}, {y:0.2f})",
+        ]
+        # TODO: Show it works for coordinates, then train on N,S,E and show it works for west even if not trained?
+        # TODO: Generate more data from simulator, can still be "offline"
+        # Make sure we handle the boundaries by staying in for one frame then resetting
+        command_locs = {
+            "west edge": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
+            "south west corner": np.array([ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_N[0] + eps]),
+            "west edge": ARENA_BOUNDS_E[1] - eps,
+            "south edge": ARENA_BOUNDS_N[0] + eps,
+            "north edge": ARENA_BOUNDS_N[1] - eps,
+        }
+        idx = random.randint(0, len(command_strings) - 1)
+        task_str = f"{prompt} {command_strings[idx]}"
+        task_strings.append(task_str)
+        goals.append((x, y))
+    task_embeddings = llm.encode(task_strings)
 
-#     def reward_fn(dataset, goal):
-#         # Dataset shape: [B, 2]
-#         # Goal shape: [G, 2]
-#         # Output shape: [B, G]
-#         # TODO: Add boundary reward
-#         return (
-#             relative_goal_pos_reward(dataset, goal) 
-#             #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
-#             + goal_pos_done(dataset, goal, 0.1)
-#             - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
-#         )
+    def reward_fn(dataset, goal):
+        # Dataset shape: [B, 2]
+        # Goal shape: [G, 2]
+        # Output shape: [B, G]
+        # TODO: Add boundary reward
+        return (
+            relative_goal_pos_reward(dataset, goal) 
+            #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
+            #+ goal_pos_done(dataset, goal, 0.1)
+            - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+        )
 
-#     def done_fn(dataset, goal):
-#         return (
-#             boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
-#             | (
-#                 goal_pos_done(dataset, goal, 0.1)
-#                 #& goal_vel_done(dataset, np.zeros_like(goal), 0.1)
-#             )
-#         )
+    def done_fn(dataset, goal):
+        return (
+            boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            # | (
+            #     goal_pos_done(dataset, goal, 0.1)
+            #     #& goal_vel_done(dataset, np.zeros_like(goal), 0.1)
+            # )
+        )
     
-#     reward_kwargs = {"goal": np.array(goals)}
-#     assert len(task_strings) == len(task_embeddings) == reward_kwargs["goal"].shape[0] == num_tasks
+    reward_kwargs = {"goal": np.array(goals)}
+    assert len(task_strings) == len(task_embeddings) == reward_kwargs["goal"].shape[0] == num_tasks
 
-#     return {
-#         "task_string": task_strings,
-#         #"task_embedding": np.concatenate(task_embeddings, axis=0),
-#         "task_embedding": np.stack(task_embeddings, axis=0),
-#         "reward_function": reward_fn,
-#         "done_function": done_fn,
-#         "reward_kwargs": reward_kwargs
-#     }
+    return {
+        "task_string": task_strings,
+        #"task_embedding": np.concatenate(task_embeddings, axis=0),
+        "task_embedding": np.stack(task_embeddings, axis=0),
+        "reward_function": reward_fn,
+        "done_function": done_fn,
+        "reward_kwargs": reward_kwargs
+    }
 
 def add_rewards_to_dataset(dataset, reward_dict):
     """Compute the cartesian product of transition tuples and rewards.
