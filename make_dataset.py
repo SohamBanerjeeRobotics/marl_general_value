@@ -25,7 +25,6 @@ if __name__ == '__main__':
         file.create_dataset("next_done", data=all_data_with_rewards["next_done"])
         file.create_dataset("task_embedding", data=all_data_with_rewards["task_embedding"])
         file.create_dataset("task_string", data=l_tasks["task_string"], dtype=h5py.special_dtype(vlen=str))
-#file.create_dataset("task_strings", )
 
-#ALL_TASKS = make_global_navigation_tasks()
-#breakpoint()
+#  Generate embeddings for evaluation
+import robomaster_control_make_cmds

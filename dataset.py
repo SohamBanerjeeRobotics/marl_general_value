@@ -101,22 +101,20 @@ def test_action_to_discrete():
 def augment_dataset(dataset, size, augment_size, key, eps=0.01):
     """Augment the dataset with additional zero-velocity data."""
     keys = jax.random.split(key, 8)
-    e_state = jax.random.uniform(keys[0], shape=(augment_size,), minval=ARENA_BOUNDS_E[0], maxval=ARENA_BOUNDS_E[1])
-    n_state = jax.random.uniform(keys[1], shape=(augment_size,), minval=ARENA_BOUNDS_N[0], maxval=ARENA_BOUNDS_N[1])
+    e_state = jax.random.uniform(keys[0], shape=(augment_size,), minval=ARENA_BOUNDS_E[0] - 0.05, maxval=ARENA_BOUNDS_E[1] + 0.05)
+    n_state = jax.random.uniform(keys[1], shape=(augment_size,), minval=ARENA_BOUNDS_N[0] - 0.05, maxval=ARENA_BOUNDS_N[1] + 0.05)
     augment = {
         "state": np.stack([
             n_state,
             e_state,
             jax.random.normal(keys[2], shape=(augment_size,),) * eps, 
             jax.random.normal(keys[3], shape=(augment_size,),) * eps, 
-            jax.random.normal(keys[4], shape=(augment_size,),) * eps, 
         ], axis=1),
         "next_state": np.stack([
             n_state,
             e_state,
             jax.random.normal(keys[5], shape=(augment_size,),) * eps, 
             jax.random.normal(keys[6], shape=(augment_size,),) * eps, 
-            jax.random.normal(keys[7], shape=(augment_size,),) * eps, 
         ], axis=1),
         "action": jnp.ones((augment_size, 2), dtype=np.int32) * ACTION_VEL["0"]
     }
