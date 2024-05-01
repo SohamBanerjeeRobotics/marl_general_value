@@ -9,6 +9,7 @@ import os, sys, time
 import math, random
 import numpy as np
 
+
 class Robot:
     def __init__(self, name):
         self.name = name;
@@ -36,6 +37,7 @@ class Robot:
         return self.have_state;
 
 class RobomasterEval(Node):
+    task_idx = 0
     def __init__(self):
         super().__init__("robomaster_eval");
 
@@ -86,15 +88,35 @@ class RobomasterEval(Node):
             return;
         
         state = self.robots[r].get_state();                                       # returns struct type
-        state = np.array([state.pe, state.pn, state.yaw, state.ve, state.vn]);    # note the order
-        prompt_str = list(RControl.mappings.keys())[1];
-        act = RControl.policy_wrapper( state, RControl.mappings[ prompt_str ] );
+        state = np.array([state.pn, state.pe, state.vn, state.ve]);    # note the order
 
-        self.RefState.ve = float(act[0]);
-        self.RefState.vn = float(act[1]);
+        prompt_str = list(RControl.mappings.keys())[self.task_idx];
+        embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
+
+        if np.linalg.norm(state[:2] - goal) < 0.3:
+            print("Completed task!")
+            self.task_idx = (self.task_idx + 1) % len(RControl.mappings)
+            prompt_str = list(RControl.mappings.keys())[self.task_idx];
+            embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
+
+        action_vel, action_idx = RControl.policy_wrapper(
+            RControl.q_function,
+            state, 
+            embedding,
+        );
+        action_str = list(RControl.ACTION_IDX.keys())[action_idx]
+
+        self.RefState.vn = float(action_vel[0]);
+        self.RefState.ve = float(action_vel[1]);
         self.ref_pubs[r].publish(self.RefState);
 
-        print( f"prompt_str: {prompt_str}, action (ve/vn): {act[0]:.2f}/{act[1]:.2f}, state (pe/pn): {state[1]:.2f}/{state[0]:.2f}" );
+        print(
+            f"Task: {self.task_idx}"
+            f"prompt_str: {prompt_str}\n"
+            f"action (vn/ve/str): {action_vel[0]:.2f}/{action_vel[1]:.2f}"
+            f"/{action_str}\n"
+            f"state (pn/pe/ve/vn): {state[0]:.2f}/{state[1]:.2f}/{state[2]:.2f}/{state[3]:.2f}" 
+        );
 
         # book-keeping
         self.mytime += self.timer_dt;
