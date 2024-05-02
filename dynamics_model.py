@@ -1,13 +1,7 @@
 import jax
-import pickle
 import numpy as np
 import jax.numpy as jnp
 import equinox as eqx
-import optax
-import tqdm
-import pandas as pd
-from modules import Block
-from dataset import dataset_from_csv, split_dataset
 from constants import ACTION_IDX, ARENA_BOUNDS_E, ARENA_BOUNDS_N
 
 
