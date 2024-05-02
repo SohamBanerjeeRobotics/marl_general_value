@@ -9,16 +9,16 @@ from rewards2 import point_navigation_reward
 
 
 class MARLEnv:
-    def __init__(self, num_agents=1, width=600, height=600, w_padding=100, h_padding=100):
+    def __init__(self, num_agents=1, scale=128, padding=0.1):
         self.initial_velocities = jnp.concatenate(list(ACTION_VEL.values()))
         model = StateTransitionModel(state_size=4, num_actions=9, dropout=0, key=jax.random.PRNGKey(0))
         model = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", model)
         self.model = eqx.filter_jit(eqx.filter_vmap(model))
         self.num_agents = num_agents
-        self.width = width
-        self.height = height
-        self.w_padding = w_padding
-        self.h_padding = h_padding
+        self.width = scale
+        self.height = scale
+        self.w_padding = padding * scale
+        self.h_padding = padding * scale
 
     def reset(self, key, eps=0.1):
         keys = jax.random.split(key, 3)
@@ -80,7 +80,7 @@ class MARLEnv:
             self.screen = pygame.display.set_mode((self.width + self.w_padding, self.height + self.h_padding))
             self.clock = pygame.time.Clock()
             self.screen.fill("gray")
-            pygame.draw.rect(self.screen, "white", self.border_vis)
+            self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
 
         agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
         goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
@@ -108,8 +108,6 @@ class MARLEnv:
 def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
     from modules import greedy_policy
 
-    #key, goal_key = jax.random.split(key)
-    #goal_idx = jax.random.choice(goal_key, jnp.arange(tasks["reward_kwargs"]["goal"].shape[0]), shape=(num_agents,), replace=False)
     embeds = tasks["task_embedding"]
 
     def scan_fn(carry, _):
@@ -136,8 +134,7 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
 
 def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
     from tasks import make_language_navigation_tasks
-    from modules import GeneralQNetwork, greedy_policy
-    from tasks import add_rewards_to_dataset
+    from modules import GeneralQNetwork
 
     key = jax.random.PRNGKey(0)
     tasks = make_language_navigation_tasks(eval_split)
@@ -177,16 +174,12 @@ def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=Tr
         q_function = eqx.tree_deserialise_leaves(model_path, q_function)
 
     e = MARLEnv(num_agents=tasks['task_embedding'].shape[0])
-    #agent_state = e.reset(key)
     data = rollout_policy(e, q_function, tasks, tasks['task_embedding'].shape[0], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
-    #rewards = tasks['reward_function'](data, goal=bgoals)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
-    # Reduce for single agent
-    sa_rewards = rewards.sum(-1)
     # Now visualize
     frames = e.visualize_seq(data['state'], bgoals[0])
-    return frames, sa_rewards
+    return data, bgoals, frames, rewards
 
 
 

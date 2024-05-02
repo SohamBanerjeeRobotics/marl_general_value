@@ -11,11 +11,13 @@ import wandb
 from modules import GeneralQNetwork, greedy_policy
 from losses import update_general_qnet
 from tasks import add_rewards_to_dataset, make_language_navigation_tasks
+from evaluate_policy import evaluate_policy
 import argparse
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, default=0)
+parser.add_argument("-w", "--wandb", action="store_true")
 args = parser.parse_args()
 
 # opt setup
@@ -42,7 +44,8 @@ config = {
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
 }
-wandb.init('morlmarl', config=config)
+if args.wandb:
+    wandb.init('morlmarl', config=config)
 
 key = jax.random.PRNGKey(config["seed"])
 
@@ -96,8 +99,8 @@ td_error = jnp.array([jnp.inf])
 
 num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
 pbar = tqdm.tqdm(total=config["epochs"])
-best_eval = -np.inf
-closest_eval = np.inf
+best_eval_return = -np.inf
+eval_return = -np.inf
 for epoch in range(1, config["epochs"]):
     for i in range(num_batches):
         start_idx = i * config["batch_size"]
@@ -109,91 +112,37 @@ for epoch in range(1, config["epochs"]):
 
         key, _ = jax.random.split(key)
         q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet)(q_function, q_target, data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
-    out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
+    out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"
     pbar.set_description(out_str)
     pbar.update()
-    wandb.log({
-        "train/loss": td_error.mean(),
-        "train/epoch": epoch,
-        "train/q_value_mean": qvalue.mean(),
-        "train/q_target_value_mean": qtarget_value.mean()
-    })
+    if args.wandb:
+        wandb.log({
+            "train/loss": td_error.mean(),
+            "train/epoch": epoch,
+            "train/q_value_mean": qvalue.mean(),
+            "train/q_target_value_mean": qtarget_value.mean()
+        })
 
     if epoch % config["eval_interval"] == 0 or epoch == 1:
         # Eval
-        ep_rewards = 0
         eval_q_function = eqx.nn.inference_mode(q_function)
-        final_dists = []
-        all_states = []
-        num_eval_episodes = len(eval_tasks["task_string"])
-        for i in range(num_eval_episodes):
-            done = False
-            eval_task = {
-                "task_string": eval_tasks["task_string"][i:i+1],
-                "task_embedding": eval_tasks["task_embedding"][i:i+1],
-                "reward_function": eval_tasks["reward_function"],
-                "done_function": eval_tasks["done_function"],
-                "reward_kwargs": {"goal": eval_tasks["reward_kwargs"]["goal"][i:i+1]},
-            }
-            # Opposite end 
-            agent_state = jnp.concatenate([-eval_task["reward_kwargs"]["goal"].squeeze(0), jnp.zeros(2)])
-            ep_reward = 0
-            num_steps = 0
-            states = []
-            while not done and num_steps < 50:
-                action = greedy_policy(
-                    eval_q_function, agent_state, eval_task["task_embedding"].squeeze(0), key=jax.random.PRNGKey(0)
-                )
-                next_state = simulator(agent_state, action)
-                reward_fn_inputs = {
-                    "state": agent_state.reshape(1, -1),
-                    "action": action.reshape(1, -1),
-                    "next_state": next_state.reshape(1, -1),
-                }
-                states.append(agent_state)
-                result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
-                reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
+        data, goals, frames, rewards = evaluate_policy(q_function=eval_q_function)
+        mean_eval_dist = jnp.linalg.norm(data['next_state'][...,:2] - goals)
 
-                agent_state = next_state
-                ep_reward += reward
-                num_steps += 1
-            ep_rewards += ep_reward
-            all_states.append(jnp.stack(states, axis=0))
-            final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_task["reward_kwargs"]["goal"]).item())
 
-        video = []
-        for i, trajectory in enumerate(all_states):
-            frames = jnp.zeros((trajectory.shape[0], 64, 64, 3), dtype=jnp.uint8)
-            # boundaries roughly -2, 2
-            agent_idx = ((2 + trajectory[:, :2]) * 64 / 4).astype(jnp.int32)
-            agent_idx = jnp.concatenate([jnp.arange(agent_idx.shape[0]).reshape(-1,1), agent_idx], axis=1)
-            agent_color = jnp.array([255, 0, 0], dtype=jnp.uint8)
-            goal_color = jnp.array([0, 255, 0], dtype=jnp.uint8)
-            goal_idx = ((2 + eval_tasks["reward_kwargs"]["goal"][i]) * 64 / 4).astype(jnp.int32)
-            f, r, c = agent_idx.T
-            frames = frames.at[f, r, c].set(agent_color)
-            frames = frames.at[:, goal_idx[0], goal_idx[1]].set(goal_color)
-            video.append(frames)
-        video = jnp.concatenate(video, axis=0)
-        video = jnp.transpose(video, (0, 3, 1, 2))
-        video = wandb.Video(np.array(video), fps=10)
-        eval_score = ep_rewards.item() / num_eval_episodes
-        eval_dists = jnp.mean(jnp.array(final_dists))
-        print(f"Episode reward: {eval_score:.2f}, final dist {eval_dists:.2f}")
-        closest_eval = min(eval_dists.item(), closest_eval)
-        if eval_score > best_eval or eval_score > 2.8:
-            eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_score:0.2f}.eqx", q_function)
-        if eval_score > best_eval:
-            best_eval = eval_score
-        wandb.log({
-            "eval/mean_return": eval_score,
-            "eval/mean_dist2goal": jnp.mean(jnp.array(final_dists)),
-            "eval/video": video,
-            "eval/best_return": best_eval,
-            "eval/closest_distance": closest_eval,
-            "train/epoch": epoch,
-        }, step=epoch)
+        eval_return = rewards.sum(0).mean()
+        if eval_return > best_eval_return:
+            best_eval_return = eval_return
+            eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
+
+        video = jnp.transpose(frames, (0, 3, 1, 2))
+        if args.wandb:
+            video = wandb.Video(np.array(video), fps=10)
+            wandb.log({
+                "eval/mean_return": eval_return,
+                "eval/mean_distance": eval_return,
+                "eval/video": video,
+                "eval/best_return": best_eval_return,
+                "train/epoch": epoch,
+            }, step=epoch)
         
-
-
-
