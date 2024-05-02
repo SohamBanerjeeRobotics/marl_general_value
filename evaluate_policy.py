@@ -16,10 +16,8 @@ class MARLEnv:
         model = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", model)
         self.model = eqx.filter_jit(eqx.filter_vmap(model))
         self.num_agents = num_agents
-        self.width = scale
-        self.height = scale
-        self.w_padding = padding * scale
-        self.h_padding = padding * scale
+        self.scale = scale
+        self.padding = scale * padding
 
     def reset(self, key, eps=0.1):
         keys = jax.random.split(key, 3)
@@ -51,9 +49,9 @@ class MARLEnv:
         return next_state
 
     def state_pos_to_screen_pos(self, pos):
-        e_scale = self.width / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
-        n_scale = self.height / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
-        scaled_pos = pos * jnp.array([n_scale, e_scale]) + jnp.array([self.w_padding / 2, self.h_padding / 2])
+        e_scale = self.scale / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
+        n_scale = self.scale / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
+        scaled_pos = pos * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, self.padding / 2])
         # Screen coords are left to right, top to bottom
         screen_pos = (scaled_pos * jnp.array([1, -1])).T
         return screen_pos
@@ -77,8 +75,8 @@ class MARLEnv:
         import pygame
         if not pygame.get_init():
             pygame.init()
-            self.border_vis = pygame.Rect(self.w_padding // 2, self.h_padding // 2, self.width, self.height)
-            self.screen = pygame.display.set_mode((self.width + self.w_padding, self.height + self.h_padding))
+            self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
+            self.screen = pygame.display.set_mode((self.scale + self.padding , self.scale + self.padding))
             self.clock = pygame.time.Clock()
             self.screen.fill("gray")
             self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
