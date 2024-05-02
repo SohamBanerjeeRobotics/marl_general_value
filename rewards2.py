@@ -25,16 +25,16 @@ def boundary_done(dataset, e_bounds, n_bounds):
 def goal_pos_reward(dataset, goal):
     """Reward for relative distance to goal"""
     assert dataset["state"].ndim == 1
-    return jnp.sum((dataset["state"][STATE_IDX["pos"]] - goal) ** 2)
+    return jnp.sum(jnp.linalg.norm(dataset["state"][STATE_IDX["pos"]] - goal))
 
 def relative_goal_pos_reward(dataset, goal):
     """Reward for taking a step in the correct direction"""
     assert dataset["state"].ndim == 1
     return jnp.sum(
         # Distance to goal before
-        ((dataset["state"][STATE_IDX["pos"]] - goal) ** 2
+        jnp.linalg.norm(dataset["state"][STATE_IDX["pos"]] - goal)
         # Distance to goal now
-        - (dataset["next_state"][STATE_IDX["pos"]] - goal) ** 2), 
+        - jnp.linalg.norm(dataset["next_state"][STATE_IDX["pos"]] - goal)
     )
 
 def goal_pos_done(dataset, goal_pos, threshold=0.1):
@@ -43,11 +43,10 @@ def goal_pos_done(dataset, goal_pos, threshold=0.1):
 def point_navigation_reward(dataset, goal):
     return (
         relative_goal_pos_reward(dataset, goal) 
-        - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+        - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
     )
 
 def point_navigation_done(dataset, goal, threshold=0.1):
     return (
         boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
-        | goal_pos_done(dataset, goal, threshold)
     )
