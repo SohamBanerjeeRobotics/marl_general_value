@@ -140,7 +140,7 @@ for epoch in range(1, config["epochs"]):
             video = wandb.Video(np.array(video), fps=10)
             wandb.log({
                 "eval/mean_return": eval_return,
-                "eval/mean_distance": eval_return,
+                "eval/mean_distance": mean_eval_dist,
                 "eval/video": video,
                 "eval/best_return": best_eval_return,
                 "train/epoch": epoch,
