@@ -78,23 +78,37 @@ class MARLEnv:
         agent_pos = eqx.filter_vmap(self.state_pos_to_screen_pos)(agent_state[:, :2])
         agent_goal = eqx.filter_vmap(self.state_pos_to_screen_pos)(goal)
 
-        agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
-        goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
+        #agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
+        #goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
+        color = [
+            "red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta", "pink",
+            "aqua", "bisque", "brown", "burlywood", "cadetblue1", "darkgoldenrod1", "gold", 
+            "light salmon", "light steel blue", "olive"
+            ]
+        cross_length = 0.05 * self.scale
 
         self.screen.fill("gray")
         self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
         for i in range(len(agent_pos)):
             pygame.draw.circle(
                 self.screen, 
-                agent_color[i].tolist(),
+                color[i],
                 agent_pos[i].tolist(), 
                 0.05 * self.scale,
             )
-            pygame.draw.circle(
-                self.screen, 
-                goal_color[i].tolist(),
-                agent_goal[i].tolist(), 
-                0.05 * self.scale,
+            pygame.draw.line(
+                self.screen,
+                color[i],
+                (agent_goal[i] - jnp.array([cross_length, 0])).tolist(),
+                (agent_goal[i] + jnp.array([cross_length, 0])).tolist(),
+                2
+            )
+            pygame.draw.line(
+                self.screen,
+                color[i],
+                (agent_goal[i] - jnp.array([0, cross_length])).tolist(),
+                (agent_goal[i] + jnp.array([0, cross_length])).tolist(),
+                2
             )
 
         pygame.display.flip()
