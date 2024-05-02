@@ -79,8 +79,8 @@ class MARLEnv:
             self.border_vis = pygame.Rect(self.w_padding // 2, self.h_padding // 2, self.width, self.height)
             self.screen = pygame.display.set_mode((self.width + self.w_padding, self.height + self.h_padding))
             self.clock = pygame.time.Clock()
-            self.screen.fill((255, 255, 255))
-            pygame.draw.rect(self.screen, "gray", self.border_vis)
+            self.screen.fill("gray")
+            pygame.draw.rect(self.screen, "white", self.border_vis)
 
         agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
         goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
@@ -134,102 +134,61 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
         "action": jnp.expand_dims(action, -1),
     }
 
- 
-        
-        
-
-
-    #     ep_rewards = 0
-    #     eval_q_function = eqx.nn.inference_mode(self.q_function)
-    #     final_dists = []
-    #     all_states = []
-    #     for i in range(self.eval_episodes):
-    #         agent_state = jnp.array([0.0, 0.0, 0, 0, 0])
-    #         done = False
-    #         eval_task = {
-    #             "task_string": self.tasks["task_string"][i:i+1],
-    #             "task_embedding": self.tasks["task_embedding"][i:i+1],
-    #             "reward_function": self.tasks["reward_function"],
-    #             "done_function": self.tasks["done_function"],
-    #             "reward_kwargs": {"goal": self.tasks["reward_kwargs"]["goal"][i:i+1]},
-    #         }
-    #         ep_reward = 0
-    #         num_steps = 0
-    #         states = []
-    #         while not done and num_steps < 50:
-    #             action = greedy_policy(
-    #                 eval_q_function, agent_state, self.tasks["task_embedding"][i], key=jax.random.PRNGKey(0)
-    #             )
-    #             next_state = self.simulator(agent_state, action)
-    #             reward_fn_inputs = {
-    #                 "state": agent_state.reshape(1, -1),
-    #                 "action": action.reshape(1, -1),
-    #                 "next_state": next_state.reshape(1, -1),
-    #             }
-    #             states.append(agent_state)
-    #             result = add_rewards_to_dataset(reward_fn_inputs, eval_task)
-    #             reward, done = result['next_reward'].reshape(1), result['next_done'].reshape(1)
-
-    #             agent_state = next_state
-    #             ep_reward += reward
-    #             num_steps += 1
-    #         ep_rewards += ep_reward
-    #         all_states.append(jnp.stack(states, axis=0))
-    #         final_dists.append(jnp.linalg.norm(agent_state[:2] - eval_task["reward_kwargs"]["goal"]).item())
-
-    #     video = []
-    #     for i, trajectory in enumerate(all_states):
-    #         frames = jnp.zeros((trajectory.shape[0], 64, 64, 3), dtype=jnp.uint8)
-    #         # boundaries roughly -2, 2
-    #         agent_idx = ((
-
-if __name__ == '__main__':
+def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
     from tasks import make_language_navigation_tasks
     from modules import GeneralQNetwork, greedy_policy
     from tasks import add_rewards_to_dataset
 
     key = jax.random.PRNGKey(0)
-    tasks = make_language_navigation_tasks()
-    eval_timesteps=50
-    config = {
-        "seed": 0,
-        "lr": 0.0001,
-        "loss": "meanq",
-        "weight_decay": 0.0001,
-        "gamma": jnp.array([0.95]),
-        "batch_size": 32,
-        "tau": jnp.array([1/1000]),
-        "epochs": 3000,
-        "eval_interval": 50,
-        "q_config": {
-            "mlp_size": 384,
-            "head_size": 384,
-            "ensemble_size": 1,
-            "dropout": 0.0,
-            "ensemble_size": 2,
-            "ensemble_reduce": "min",
-        },
-        "task_size": 768,
-        "obs_size": 4,
-        "act_size": 9,
-        "simulator_weights": "data/dynamics_model_weights.eqx",
-    }
-    q_function = GeneralQNetwork(
-        obs_size=config["obs_size"], 
-        task_size=config["task_size"], 
-        act_size=config["act_size"], 
-        config=config["q_config"], 
-        key=key
-    )
+    tasks = make_language_navigation_tasks(eval_split)
+    if config is None:
+        config = {
+            "seed": 0,
+            "lr": 0.0001,
+            "loss": "meanq",
+            "weight_decay": 0.0001,
+            "gamma": jnp.array([0.95]),
+            "batch_size": 32,
+            "tau": jnp.array([1/1000]),
+            "epochs": 3000,
+            "eval_interval": 50,
+            "q_config": {
+                "mlp_size": 384,
+                "head_size": 384,
+                "ensemble_size": 1,
+                "dropout": 0.0,
+                "ensemble_size": 2,
+                "ensemble_reduce": "min",
+            },
+            "task_size": 768,
+            "obs_size": 4,
+            "act_size": 9,
+            "simulator_weights": "data/dynamics_model_weights.eqx",
+        }
+    if q_function is None:
+        q_function = GeneralQNetwork(
+            obs_size=config["obs_size"], 
+            task_size=config["task_size"], 
+            act_size=config["act_size"], 
+            config=config["q_config"], 
+            key=key
+        )
+    if model_path is not None:
+        q_function = eqx.tree_deserialise_leaves(model_path, q_function)
 
     e = MARLEnv(num_agents=tasks['task_embedding'].shape[0])
     #agent_state = e.reset(key)
-    data = rollout_policy(e, q_function, tasks, tasks['task_embedding'].shape[0], key, eval_timesteps)
-    bgoals = jnp.repeat(jnp.expand_dims(tasks['reward_kwargs']['goal'], 0), eval_timesteps, axis=0)
+    data = rollout_policy(e, q_function, tasks, tasks['task_embedding'].shape[0], key, timesteps)
+    bgoals = jnp.repeat(jnp.expand_dims(tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     #rewards = tasks['reward_function'](data, goal=bgoals)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
     # Reduce for single agent
     sa_rewards = rewards.sum(-1)
     # Now visualize
     frames = e.visualize_seq(data['state'], bgoals[0])
+    return frames, sa_rewards
 
+
+
+if __name__ == '__main__':
+    evaluate_policy()
