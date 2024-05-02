@@ -59,9 +59,9 @@ class MARLEnv:
         return next_state
 
     def state_pos_to_screen_pos(self, pos):
-        e_scale = self.scale / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
-        n_scale = self.scale / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
-        scaled_pos = pos * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, self.padding / 2])
+        n_scale = (self.scale + self.padding) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
+        e_scale = (self.scale + self.padding) / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
+        scaled_pos = pos * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, -self.padding / 2])
         # Screen coords are left to right, top to bottom
         screen_pos = (scaled_pos * jnp.array([1, -1])).T
         return screen_pos
