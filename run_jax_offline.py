@@ -145,7 +145,7 @@ for epoch in range(1, config["epochs"]):
                 "eval/mean_distance": mean_eval_distance,
                 "eval/video": video,
                 "eval/best_return": best_eval_return,
-                "eva/best_distance": best_eval_distance,
+                "eval/best_distance": best_eval_distance,
                 "train/epoch": epoch,
             }, step=epoch)
         
