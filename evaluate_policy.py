@@ -82,10 +82,11 @@ class MARLEnv:
         #goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
         color = [
             "red", "green", "blue", "yellow", "purple", "orange", "cyan", "magenta", "pink",
-            "aqua", "bisque", "brown", "burlywood", "cadetblue1", "darkgoldenrod1", "gold", 
+            "bisque", "brown", "burlywood", "cadetblue1", "darkgoldenrod1", "gold", 
             "light salmon", "light steel blue", "olive"
             ]
         cross_length = 0.05 * self.scale
+        x_length = 0.033 * self.scale
 
         self.screen.fill("gray")
         self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
@@ -96,20 +97,37 @@ class MARLEnv:
                 agent_pos[i].tolist(), 
                 0.05 * self.scale,
             )
-            pygame.draw.line(
-                self.screen,
-                color[i],
-                (agent_goal[i] - jnp.array([cross_length, 0])).tolist(),
-                (agent_goal[i] + jnp.array([cross_length, 0])).tolist(),
-                2
-            )
-            pygame.draw.line(
-                self.screen,
-                color[i],
-                (agent_goal[i] - jnp.array([0, cross_length])).tolist(),
-                (agent_goal[i] + jnp.array([0, cross_length])).tolist(),
-                2
-            )
+        for i in range(len(agent_pos)):
+            if i % 2 == 0:
+                pygame.draw.line(
+                    self.screen,
+                    color[i],
+                    (agent_goal[i] - jnp.array([x_length, x_length])).tolist(),
+                    (agent_goal[i] + jnp.array([x_length, x_length])).tolist(),
+                    2
+                )
+                pygame.draw.line(
+                    self.screen,
+                    color[i],
+                    (agent_goal[i] - jnp.array([-x_length, x_length])).tolist(),
+                    (agent_goal[i] + jnp.array([-x_length, x_length])).tolist(),
+                    2
+                )
+            else:
+                pygame.draw.line(
+                    self.screen,
+                    color[i],
+                    (agent_goal[i] - jnp.array([cross_length, 0])).tolist(),
+                    (agent_goal[i] + jnp.array([cross_length, 0])).tolist(),
+                    2
+                )
+                pygame.draw.line(
+                    self.screen,
+                    color[i],
+                    (agent_goal[i] - jnp.array([0, cross_length])).tolist(),
+                    (agent_goal[i] + jnp.array([0, cross_length])).tolist(),
+                    2
+                )
 
         pygame.display.flip()
         return pygame.surfarray.array3d(self.screen)
@@ -142,7 +160,7 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
         "action": jnp.expand_dims(action, -1),
     }
 
-def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
+def evaluate_policy(env_kwargs={}, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
     from tasks import make_language_navigation_tasks
     from modules import GeneralQNetwork
 
@@ -183,7 +201,7 @@ def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=Tr
     if model_path is not None:
         q_function = eqx.tree_deserialise_leaves(model_path, q_function)
 
-    e = MARLEnv(num_agents=tasks['task_embedding'].shape[0])
+    e = MARLEnv(**env_kwargs, num_agents=tasks['task_embedding'].shape[0])
     data = rollout_policy(e, q_function, tasks, tasks['task_embedding'].shape[0], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
@@ -192,6 +210,15 @@ def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=Tr
     return data, bgoals, frames, rewards
 
 
+def create_video(*args, **kwargs):
+    import imageio
+    data, bgoals, frames, rewards = evaluate_policy(*args, **kwargs)
+    # Define the codec and create a VideoWriter object
+    #frames = np.array(jnp.transpose(frames, (0, 3, 1, 2)))
+    frames = np.array(frames, dtype=np.uint8)
+    with imageio.get_writer('video.mp4', fps=1) as writer:
+        for frame in frames:
+            writer.append_data(frame)
 
 if __name__ == '__main__':
-    evaluate_policy()
+    create_video(model_path=None, env_kwargs={"scale": 480})
