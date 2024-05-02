@@ -100,6 +100,7 @@ td_error = jnp.array([jnp.inf])
 num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
 pbar = tqdm.tqdm(total=config["epochs"])
 best_eval_return = -np.inf
+best_eval_distance = np.inf
 eval_return = -np.inf
 for epoch in range(1, config["epochs"]):
     for i in range(num_batches):
@@ -127,22 +128,24 @@ for epoch in range(1, config["epochs"]):
         # Eval
         eval_q_function = eqx.nn.inference_mode(q_function)
         data, goals, frames, rewards = evaluate_policy(q_function=eval_q_function)
-        mean_eval_dist = jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
-
-
+        mean_eval_distance = jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
         eval_return = rewards.sum(0).mean()
+
         if eval_return > best_eval_return:
             best_eval_return = eval_return
-            eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
+        if mean_eval_distance > best_eval_distance:
+            best_eval_distance = mean_eval_distance
 
+        eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
         video = jnp.transpose(frames, (0, 3, 1, 2))
         if args.wandb:
             video = wandb.Video(np.array(video), fps=10)
             wandb.log({
                 "eval/mean_return": eval_return,
-                "eval/mean_distance": mean_eval_dist,
+                "eval/mean_distance": mean_eval_distance,
                 "eval/video": video,
                 "eval/best_return": best_eval_return,
+                "eva/best_distance": best_eval_distance,
                 "train/epoch": epoch,
             }, step=epoch)
         
