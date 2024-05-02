@@ -133,7 +133,7 @@ class MARLEnv:
         return pygame.surfarray.array3d(self.screen)
 
 
-def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
+def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initial_state=None):
     from modules import greedy_policy
 
     embeds = tasks["task_embedding"]
@@ -147,7 +147,8 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
         return (next_state, action), (agent_state, action, next_state)
 
     key, reset_key = jax.random.split(key)
-    agent_states = env.reset(reset_key)
+    if initial_state is None:
+        agent_states = env.reset(reset_key)
     _, (state, action, next_state) = jax.lax.scan(
         f=scan_fn, 
         init=(agent_states, jnp.zeros((agent_states.shape[0],), dtype=jnp.int32)),
