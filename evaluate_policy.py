@@ -23,9 +23,8 @@ class MARLEnv:
         if headless:
             import os
             os.environ['SDL_VIDEODRIVER'] = 'dummy'
-            #os.environ['SDL_AUDIODRIVER'] = 'disk'
 
-        pygame.init()
+        pygame.display.init()
         self.screen = pygame.display.set_mode((self.scale + self.padding , self.scale + self.padding))
         self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
 
