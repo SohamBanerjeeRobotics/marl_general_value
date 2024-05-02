@@ -4,7 +4,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from dataset import STATE_IDX
+from constants import STATE_IDX
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
 def pairwise_distances(A):

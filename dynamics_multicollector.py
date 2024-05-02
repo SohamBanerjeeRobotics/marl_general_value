@@ -2,7 +2,7 @@ import jax.numpy as jnp
 import jax
 from jax import random
 from dynamics_model import StateTransitionModel
-from dataset import ARENA_BOUNDS_N, ARENA_BOUNDS_E  
+from constants import ARENA_BOUNDS_N, ARENA_BOUNDS_E  
 import equinox as eqx
 
 class DynamicsMultiCollector:

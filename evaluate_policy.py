@@ -1,11 +1,11 @@
 import copy
-from dataset import ACTION_IDX
+from constants import ACTION_IDX
 from dynamics_model import StateTransitionModel
 import equinox as eqx
 import jax.numpy as jnp
 import jax
 import numpy as np
-from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N, ACTION_VEL, ACTION_MAPPING
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, ACTION_VEL
 from rewards2 import point_navigation_reward
 import pygame
 

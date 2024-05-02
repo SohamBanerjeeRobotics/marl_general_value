@@ -4,7 +4,7 @@ import equinox as eqx
 import jax.numpy as jnp
 import pygame
 import jax
-from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N
 
 
 def to_screen(pos, borders):

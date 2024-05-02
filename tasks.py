@@ -4,7 +4,7 @@ import random
 #from angle_emb import AnglE
 from sentence_transformers import SentenceTransformer
 import numpy as np
-from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N, dataset_from_csv
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N
 import h5py
 
 random.seed(0)
