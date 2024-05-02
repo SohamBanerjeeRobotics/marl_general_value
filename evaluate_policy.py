@@ -7,10 +7,11 @@ import jax
 import numpy as np
 from dataset import ARENA_BOUNDS_E, ARENA_BOUNDS_N, ACTION_VEL, ACTION_MAPPING
 from rewards2 import point_navigation_reward
+import pygame
 
 
 class MARLEnv:
-    def __init__(self, num_agents=1, scale=128, padding=0.1):
+    def __init__(self, num_agents=1, scale=128, padding=0.1, headless=True):
         self.initial_velocities = jnp.concatenate(list(ACTION_VEL.values()))
         model = StateTransitionModel(state_size=4, num_actions=9, dropout=0, key=jax.random.PRNGKey(0))
         model = eqx.tree_deserialise_leaves("data/dynamics_model_weights.eqx", model)
@@ -18,6 +19,15 @@ class MARLEnv:
         self.num_agents = num_agents
         self.scale = scale
         self.padding = scale * padding
+
+        if headless:
+            import os
+            os.environ['SDL_VIDEODRIVER'] = 'dummy'
+            #os.environ['SDL_AUDIODRIVER'] = 'disk'
+
+        pygame.init()
+        self.screen = pygame.display.set_mode((self.scale + self.padding , self.scale + self.padding))
+        self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
 
     def reset(self, key, eps=0.1):
         keys = jax.random.split(key, 3)
@@ -49,41 +59,29 @@ class MARLEnv:
         return next_state
 
     def state_pos_to_screen_pos(self, pos):
-        e_scale = (self.scale - self.padding) / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
-        n_scale = (self.scale - self.padding) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
+        e_scale = self.scale / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
+        n_scale = self.scale / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
         scaled_pos = pos * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, self.padding / 2])
         # Screen coords are left to right, top to bottom
         screen_pos = (scaled_pos * jnp.array([1, -1])).T
         return screen_pos
 
-    def visualize_seq(self, agent_states, goal, dt=1e-4):
+    def render_seq(self, agent_states, goal):
         frames = []
         for t in range(agent_states.shape[0]):
-            frames.append(self.visualize(agent_states[t], goal, True, dt))
+            frames.append(self.render(agent_states[t], goal))
         video = np.stack(frames)
         return video
 
-
-    def visualize(self, agent_state, goal, headless=False, dt=1e-4):
+    def render(self, agent_state, goal):
         agent_pos = eqx.filter_vmap(self.state_pos_to_screen_pos)(agent_state[:, :2])
         agent_goal = eqx.filter_vmap(self.state_pos_to_screen_pos)(goal)
 
-        if headless:
-            import os
-            os.environ['SDL_VIDEODRIVER'] = 'dummy'
-
-        import pygame
-        if not pygame.get_init():
-            pygame.init()
-            self.screen = pygame.display.set_mode((self.scale + self.padding , self.scale + self.padding))
-            self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
-            self.clock = pygame.time.Clock()
+        agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
+        goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
 
         self.screen.fill("gray")
         self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
-
-        agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
-        goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
         for i in range(len(agent_pos)):
             pygame.draw.circle(
                 self.screen, 
@@ -175,7 +173,7 @@ def evaluate_policy(model_path=None, q_function=None, config=None, eval_split=Tr
     bgoals = jnp.repeat(jnp.expand_dims(tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
     # Now visualize
-    frames = e.visualize_seq(data['state'], bgoals[0])
+    frames = e.render_seq(data['state'], bgoals[0])
     return data, bgoals, frames, rewards
 
 
