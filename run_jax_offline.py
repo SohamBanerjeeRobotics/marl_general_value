@@ -127,7 +127,7 @@ for epoch in range(1, config["epochs"]):
         # Eval
         eval_q_function = eqx.nn.inference_mode(q_function)
         data, goals, frames, rewards = evaluate_policy(q_function=eval_q_function)
-        mean_eval_dist = jnp.linalg.norm(data['next_state'][...,:2] - goals)
+        mean_eval_dist = jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
 
 
         eval_return = rewards.sum(0).mean()
