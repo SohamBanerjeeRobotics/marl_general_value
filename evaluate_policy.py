@@ -59,11 +59,13 @@ class MARLEnv:
         return next_state
 
     def state_pos_to_screen_pos(self, pos):
-        n_scale = (self.scale + self.padding) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
-        e_scale = (self.scale + self.padding) / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
-        scaled_pos = pos * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, -self.padding / 2])
-        # Screen coords are left to right, top to bottom
-        screen_pos = (scaled_pos * jnp.array([1, -1])).T
+        n_scale = (self.scale) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
+        e_scale = (self.scale) / (ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0])
+        shift = 0.5 * jnp.array([ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0], ARENA_BOUNDS_E[1] - ARENA_BOUNDS_E[0]])
+        # Flip n/y axis and change from n,e to x,y
+        flipped = (jnp.array([1, -1]) * pos).T
+        # Scale to screen and shift by screen padding
+        screen_pos = (flipped + shift) * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, self.padding / 2]) 
         return screen_pos
 
     def render_seq(self, agent_states, goal):
