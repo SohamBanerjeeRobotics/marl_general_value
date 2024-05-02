@@ -75,11 +75,12 @@ class MARLEnv:
         import pygame
         if not pygame.get_init():
             pygame.init()
-            self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
             self.screen = pygame.display.set_mode((self.scale + self.padding , self.scale + self.padding))
+            self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
             self.clock = pygame.time.Clock()
-            self.screen.fill("gray")
-            self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
+
+        self.screen.fill("gray")
+        self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
 
         agent_color = (jnp.array([255, 0, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
         goal_color = (jnp.array([0, 255, 0]).reshape(1, -1) / jnp.arange(1, self.num_agents + 1).reshape(-1, 1))
@@ -98,10 +99,9 @@ class MARLEnv:
                 0.05 * self.scale,
                 #(i + 4) * 5
             )
-        if headless:
-            return copy.deepcopy(pygame.surfarray.array3d(self.screen))
-        else:
-            pygame.display.flip()
+
+        pygame.display.flip()
+        return pygame.surfarray.array3d(self.screen)
 
 
 def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50):
