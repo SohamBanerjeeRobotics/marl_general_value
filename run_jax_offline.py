@@ -133,7 +133,7 @@ for epoch in range(1, config["epochs"]):
 
         if eval_return > best_eval_return:
             best_eval_return = eval_return
-        if mean_eval_distance > best_eval_distance:
+        if mean_eval_distance < best_eval_distance:
             best_eval_distance = mean_eval_distance
 
         eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
