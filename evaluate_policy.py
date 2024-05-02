@@ -1,3 +1,4 @@
+import copy
 from dataset import ACTION_IDX
 from dynamics_model import StateTransitionModel
 import equinox as eqx
@@ -90,17 +91,17 @@ class MARLEnv:
                 agent_color[i].tolist(),
                 agent_pos[i].tolist(), 
                 #(i + 4) * 5,
-                15,
+                0.05 * self.scale,
             )
             pygame.draw.circle(
                 self.screen, 
                 goal_color[i].tolist(),
                 agent_goal[i].tolist(), 
-                15.
+                0.05 * self.scale,
                 #(i + 4) * 5
             )
         if headless:
-            return pygame.surfarray.array3d(self.screen)
+            return copy.deepcopy(pygame.surfarray.array3d(self.screen))
         else:
             pygame.display.flip()
 
