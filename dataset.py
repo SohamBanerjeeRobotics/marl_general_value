@@ -91,13 +91,23 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
         # pn, pe, vn, ve
         df = pd.read_csv(path)
         data = {
-            "state": df['state'],
-            "next_state": df['next_state'],
-            "action": df['action'],
+            "state": jnp.stack([
+                df['state.pn'].to_numpy(),
+                df['state.pe'].to_numpy(),
+                df['state.vn'].to_numpy(),
+                df['state.ve'].to_numpy(),
+            ], axis=-1),
+            "next_state": jnp.stack([
+                df['next_state.pn'].to_numpy(),
+                df['next_state.pe'].to_numpy(),
+                df['next_state.vn'].to_numpy(),
+                df['next_state.ve'].to_numpy(),
+            ], axis=-1),
+            "action": df['action'].to_numpy(),
         }
         data = {k: jnp.array(v, copy=False) for k, v in data.items()}
 
-        size = len(df) 
+        size += len(df) 
 
         datas.append(data)
 
@@ -105,7 +115,7 @@ def dataset_from_csv(paths: List[str], relative_pose: bool = True) -> Dict[str, 
     for key in data.keys():
         data[key] = jnp.concatenate([d[key] for d in datas], axis=0)
     
-    data["action"] = jax.vmap(action_to_discrete, in_axes=(0, None))(data["action"], 0.1)
+    #data["action"] = jax.vmap(action_to_discrete, in_axes=(0, None))(data["action"], 0.1)
     data = {k: jnp.array(v, copy=False) for k, v in data.items()}
     # Shuffle
     p = jax.random.permutation(jax.random.PRNGKey(0), size)
