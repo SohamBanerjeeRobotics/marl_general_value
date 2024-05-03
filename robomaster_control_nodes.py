@@ -95,9 +95,16 @@ class RoboMasterBase(Node):
 
         action_idx = self.get_action_idx(state)
         action_vel = ACTION_MAPPING[action_idx]
-
         self.actions.append(action_idx)
         self.action_vels.append(action_vel)
+
+        action_str = list(ACTION_IDX.keys())[action_idx]
+        print(
+            f"{self.mytime}/{self.max_time}s\n"
+            f"action: {ACTION_MAPPING[action_idx]}"
+            f"/{action_str}\n"
+            f"state (pn/pe/ve/vn): {state[0]:.2f}/{state[1]:.2f}/{state[2]:.2f}/{state[3]:.2f}" 
+        )
 
         self.RefState.vn = action_vel[0].item()
         self.RefState.ve = action_vel[1].item()
@@ -105,7 +112,6 @@ class RoboMasterBase(Node):
 
         # book-keeping
         self.mytime += self.timer_dt
-        print(f"{self.mytime}/{self.max_time}s") 
         if self.mytime > self.max_time:
             self.RefState.vn = 0.0
             self.RefState.ve = 0.0
@@ -121,13 +127,8 @@ class RoboMasterCollect(RoboMasterBase):
 
 
     def get_action_idx(self, state):
-        # Sticky actions
-        if self.action is None:
-            action = random.randint(0, len(ACTION_MAPPING) - 1)
-            self.action = action
-        else:
-            action = random.randint(0, len(ACTION_MAPPING) - 1) 
-            self.action = action
+        action = random.randint(0, len(ACTION_MAPPING) - 1)
+        self.action = action
 
         if not self.safe_action(state, action):
             return self.get_action_idx(state)
