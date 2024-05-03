@@ -49,4 +49,3 @@ if __name__ == '__main__':
     print(f"action {action}: {model(jnp.array([1.0, 1.0, 0, 0]), idx)}")
   for action, idx in ACTION_IDX.items():
     print(f"action {action} delta: {jnp.array([1.0, 1.0, 0, 0]) - model(jnp.array([1.0, 1.0, 0, 0]), idx)}")
-    deltas[idx.item()] = np.array(jnp.array([1.0, 1.0, 0, 0]) - model(jnp.array([1.0, 1.0, 0, 0]), idx))[:2]
