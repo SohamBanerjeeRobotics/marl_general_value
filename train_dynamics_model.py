@@ -5,7 +5,8 @@ import optax
 import tqdm
 import pandas as pd
 from modules import Block
-from dataset import dataset_from_csv, split_dataset, ACTION_VEL
+from dataset import dataset_from_csv, split_dataset
+from constants import ACTION_VEL
 from dynamics_model import StateTransitionModel
 
 
@@ -42,16 +43,19 @@ def multistep_integrator(state, action, next_state, length=10):
   return jnp.mean(0.5 * (state - next_state) ** 2), mae
 
 batch_size = 32
-epochs = 1_000
+epochs = 400
 key = jax.random.PRNGKey(0)
 key, model_key, data_key = jax.random.split(key, 3)
 #  TODO: Should include velocity
 model = StateTransitionModel(state_size=4, num_actions=9, dropout=0, key=model_key)
 
 datasets = [
-  "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+  "data/robomaster_collect_1714734360.csv",
+  "data/robomaster_collect_1714735377.csv",
+  "data/robomaster_collect_1714736377.csv"
+  # "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  # "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+  # "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
 ]
 data, data_size = dataset_from_csv(datasets)
 train, test, val = split_dataset(data, data_size, key=data_key)

@@ -74,6 +74,7 @@ class MARLEnv:
         video = np.stack(frames)
         return video
 
+
     def render(self, agent_state, goal):
         agent_pos = eqx.filter_vmap(self.state_pos_to_screen_pos)(agent_state[:, :2])
         agent_goal = eqx.filter_vmap(self.state_pos_to_screen_pos)(goal)
@@ -221,5 +222,50 @@ def create_video(*args, **kwargs):
         for frame in frames:
             writer.append_data(frame)
 
+def run_interactive(dt=10):
+    e = MARLEnv(headless=False)
+    agent_state = e.reset(jax.random.PRNGKey(0))
+    goal = jnp.zeros_like(agent_state)[..., :2]
+
+    pygame.init()
+    clock = pygame.time.Clock()
+    running = True
+    e.render(agent_state, goal)
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+            keys = pygame.key.get_pressed()
+
+            if (keys[pygame.K_w] and keys[pygame.K_a]) or keys[pygame.K_z]:
+                # TODO: Why is N/S inverted? 
+                command = ACTION_IDX["NW"]
+            elif (keys[pygame.K_w] and keys[pygame.K_d]) or keys[pygame.K_c]:
+                command = ACTION_IDX["NE"]
+            elif (keys[pygame.K_s] and keys[pygame.K_a]) or keys[pygame.K_q]:
+                command = ACTION_IDX["SW"]
+            elif (keys[pygame.K_s] and keys[pygame.K_d]) or keys[pygame.K_e]:
+                command = ACTION_IDX["SE"]
+            elif keys[pygame.K_s]:
+                command = ACTION_IDX["S"]
+            elif keys[pygame.K_w]:
+                command = ACTION_IDX["N"]
+            elif keys[pygame.K_d]:
+                command = ACTION_IDX["E"]
+            elif keys[pygame.K_a]:
+                command = ACTION_IDX["W"]
+            else:
+                command = ACTION_IDX["0"]
+
+        action = command.reshape(1)
+
+        agent_state = e.step(agent_state, action)
+        e.render(agent_state, goal)
+        clock.tick(dt)
+
 if __name__ == '__main__':
-    create_video(model_path=None, env_kwargs={"scale": 480})
+    run_interactive()
+    #create_video(model_path=None, env_kwargs={"scale": 480})
+

@@ -7,9 +7,12 @@ import h5py
 
 if __name__ == '__main__':
     datasets = [
-        "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-        "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-        "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+        #"data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+        #"data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
+        #"data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+        "data/robomaster_collect_1714734360.csv",
+        "data/robomaster_collect_1714735377.csv",
+        "data/robomaster_collect_1714736377.csv"
     ]
     data, data_size = dataset_from_csv(datasets)
     #tasks = make_global_navigation_tasks(2_000)
