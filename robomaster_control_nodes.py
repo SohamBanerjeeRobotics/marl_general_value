@@ -1,4 +1,4 @@
-from constants import ACTION_MAPPING
+from constants import ACTION_MAPPING, ARENA_BOUNDS_N, ARENA_BOUNDS_E, ACTION_IDX
 import rclpy
 from rclpy.node import Node
 
@@ -39,7 +39,7 @@ class RoboMasterBase(Node):
     action_vels = []
 
     def setup(self):
-        self.max_time = 600;  # seconds, expt duration
+        self.max_time = 900;  # seconds, expt duration
         self.robot_names = ["robomaster_1"]
         self.n_robots = len(self.robot_names)
 
@@ -67,6 +67,19 @@ class RoboMasterBase(Node):
     def get_action_idx(self, state):
         raise NotImplementedError()
 
+
+    def safe_action(self, state, action_idx):
+        if state[0] < ARENA_BOUNDS_N[0] and action_idx in [ACTION_IDX["S"], ACTION_IDX["SW"], ACTION_IDX["SE"]]:
+            return False
+        elif state[0] > ARENA_BOUNDS_N[1] and action_idx in [ACTION_IDX["N"], ACTION_IDX["NW"], ACTION_IDX["NE"]]:
+            return False
+        elif state[1] < ARENA_BOUNDS_E[0] and action_idx in [ACTION_IDX["W"], ACTION_IDX["NW"], ACTION_IDX["SW"]]:
+            return False
+        elif state[1] > ARENA_BOUNDS_E[1] and action_idx in [ACTION_IDX["E"], ACTION_IDX["NE"], ACTION_IDX["SE"]]:
+            return False
+        else:
+            return True
+
     def commander_timer_cb(self):
         r = 0
         if not self.robots[r].ready:
@@ -76,7 +89,7 @@ class RoboMasterBase(Node):
                 self.print_help_once = False
             return
 
-        state = self.robots[r].get_state()
+        state = self.robots[r].state
         state = np.array([state.pn, state.pe, state.vn, state.ve])
         self.states.append(state)
 
@@ -92,10 +105,13 @@ class RoboMasterBase(Node):
 
         # book-keeping
         self.mytime += self.timer_dt
+        print(f"{self.mytime}/{self.max_time}s") 
         if self.mytime > self.max_time:
+            self.RefState.vn = 0.0
+            self.RefState.ve = 0.0
+            self.ref_pubs[r].publish(self.RefState)
             self.teardown()
             rclpy.shutdown()
-            sys.exit(0)
 
         
 class RoboMasterCollect(RoboMasterBase):
@@ -103,26 +119,47 @@ class RoboMasterCollect(RoboMasterBase):
         super().__init__("robomaster_collect")
         self.setup()
 
+
     def get_action_idx(self, state):
         # Sticky actions
         if self.action is None:
-            action = random.randint(0, len(ACTION_MAPPING))
+            action = random.randint(0, len(ACTION_MAPPING) - 1)
             self.action = action
-        elif random.uniform() < 0.5:
-            # Do not change action
-            action = self.action
         else:
-            action = random.randint(0, len(ACTION_MAPPING))
+            action = random.randint(0, len(ACTION_MAPPING) - 1) 
             self.action = action
+
+        if not self.safe_action(state, action):
+            return self.get_action_idx(state)
         
         return action
 
     def teardown(self):
-        df = pd.DataFrame.from_dict({
-            "state": np.stack(self.states[:-1]),
-            "next_state": np.stack(self.states[1:]),
-            "action": np.stack(self.actions[:-1]),
-            "action_vel": np.stack(self.action_vels[:-1])
+        state = np.stack(self.states[:-1])
+        next_state = np.stack(self.states[1:])
+        action = np.stack(self.actions[:-1])
+        action_vels = np.stack(self.action_vels[:-1])
+        state = pd.DataFrame.from_dict({
+            "state.pn": state[:,0],
+            "state.pe": state[:,1],
+            "state.vn": state[:,2],
+            "state.ve": state[:,3],
+        })
+        next_state = pd.DataFrame.from_dict({
+            "next_state.pn": next_state[:,0],
+            "next_state.pe": next_state[:,1],
+            "next_state.vn": next_state[:,2],
+            "next_state.ve": next_state[:,3],
+        })
+        action_vels = pd.DataFrame.from_dict({
+            "action_vel.vn": action_vels[:,0],
+            "action_vel.ve": action_vels[:,1],
+        })
+        df = pd.DataFrame({
+            **state,
+            **next_state,
+            **action_vels,
+            "action": action,
         })
         df.to_csv(f"data/robomaster_collect_{int(time.time())}.csv")
 
