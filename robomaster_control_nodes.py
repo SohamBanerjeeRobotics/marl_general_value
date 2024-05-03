@@ -187,7 +187,7 @@ class RoboMasterEval(RoboMasterBase):
             embedding,
         ).item()
         print(
-            f"Task: {self.task_idx}"
+            f"Task: {prompt_str}"
         )
         return action_idx
 

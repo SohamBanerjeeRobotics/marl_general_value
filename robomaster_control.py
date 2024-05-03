@@ -47,7 +47,7 @@ q_function = GeneralQNetwork(
     config=config["q_config"], 
     key=jax.random.PRNGKey(0)
 )
-q_function = eqx.tree_deserialise_leaves(f"models/ne-0-650-2.36.eqx", q_function)
+q_function = eqx.tree_deserialise_leaves(f"models/ne-0-950-1.94.eqx", q_function)
 
 def policy_wrapper(q_function, state, task_embedding):
     action_idx = eqx.filter_jit(greedy_policy)(q_function, state, task_embedding, key=jax.random.PRNGKey(0))
