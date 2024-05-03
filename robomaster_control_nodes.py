@@ -165,7 +165,7 @@ class RoboMasterCollect(RoboMasterBase):
         df.to_csv(f"data/robomaster_collect_{int(time.time())}.csv")
 
 
-class RobomasterEval(RoboMasterBase):
+class RoboMasterEval(RoboMasterBase):
     def __init__(self):
         super().__init__("robomaster_eval")
         self.setup()
@@ -185,23 +185,38 @@ class RobomasterEval(RoboMasterBase):
             RControl.q_function,
             state, 
             embedding,
-        )
-        action_str = list(RControl.ACTION_IDX.keys())[action_idx]
+        ).item()
         print(
             f"Task: {self.task_idx}"
-            f"prompt_str: {prompt_str}\n"
-            f"action: {ACTION_MAPPING[action_idx]}"
-            f"/{action_str}\n"
-            f"state (pn/pe/ve/vn): {state[0]:.2f}/{state[1]:.2f}/{state[2]:.2f}/{state[3]:.2f}" 
         )
         return action_idx
 
     def teardown(self):
-        df = pd.DataFrame.from_dict({
-            "state": np.stack(self.states[:-1]),
-            "next_state": np.stack(self.states[1:]),
-            "action": np.stack(self.actions[:-1]),
-            "action_vel": np.stack(self.action_vels[:-1])
+        state = np.stack(self.states[:-1])
+        next_state = np.stack(self.states[1:])
+        action = np.stack(self.actions[:-1])
+        action_vels = np.stack(self.action_vels[:-1])
+        state = pd.DataFrame.from_dict({
+            "state.pn": state[:,0],
+            "state.pe": state[:,1],
+            "state.vn": state[:,2],
+            "state.ve": state[:,3],
+        })
+        next_state = pd.DataFrame.from_dict({
+            "next_state.pn": next_state[:,0],
+            "next_state.pe": next_state[:,1],
+            "next_state.vn": next_state[:,2],
+            "next_state.ve": next_state[:,3],
+        })
+        action_vels = pd.DataFrame.from_dict({
+            "action_vel.vn": action_vels[:,0],
+            "action_vel.ve": action_vels[:,1],
+        })
+        df = pd.DataFrame({
+            **state,
+            **next_state,
+            **action_vels,
+            "action": action,
         })
         df.to_csv(f"data/robomaster_eval_{int(time.time())}.csv")
 
