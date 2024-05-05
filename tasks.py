@@ -148,7 +148,12 @@ def make_language_navigation_tasks(eval=False):
         "find your way to the {}",
         #"go to the {}",
         "move to the {}",
-        "your goal is the {}"
+        "your goal is the {}",
+        "make your way to the {}",
+        "head towards the {}",
+        "travel to the {}",
+        "reach the {}",
+        "proceed to the {}"
     ]
     eval_string_permutations = [
         "go to the {}",
