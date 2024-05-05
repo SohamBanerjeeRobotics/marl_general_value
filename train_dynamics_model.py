@@ -52,7 +52,8 @@ model = StateTransitionModel(state_size=4, num_actions=9, dropout=0, key=model_k
 datasets = [
   "data/robomaster_collect_1714734360.csv",
   "data/robomaster_collect_1714735377.csv",
-  "data/robomaster_collect_1714736377.csv"
+  "data/robomaster_collect_1714736377.csv",
+  "data/robomaster_collect_1714737295.csv"
   # "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
   # "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
   # "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"

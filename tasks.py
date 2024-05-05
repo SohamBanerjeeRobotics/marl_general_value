@@ -144,15 +144,19 @@ def make_language_navigation_tasks(eval=False):
         }
     string_permutations = [
         "navigate to the {}",
-        #"pathfind to the {}",
-        #"find your way to the {}",
+        "pathfind to the {}",
+        "find your way to the {}",
         #"go to the {}",
-        #"move to the {}",
-        #"your goal is the {}"
+        "move to the {}",
+        "your goal is the {}"
+    ]
+    eval_string_permutations = [
+        "go to the {}",
     ]
     
     if eval:
         command_locs = {**command_locs, **ne} 
+        string_permutations = eval_string_permutations
     for c, goal in command_locs.items():
         for s in string_permutations:
         # TODO: Show it works for coordinates, then train on N,S,E and show it works for west even if not trained?
