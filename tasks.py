@@ -182,7 +182,7 @@ def make_language_navigation_tasks(eval=False):
 
     def done_fn(dataset, goal):
         return (
-            jnp.repeat(boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1), 10, axis=-1)
+            jnp.repeat(boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1), goal.shape[1], axis=-1)
             | goal_pos_done(dataset, goal, 0.1)
             #     #& goal_vel_done(dataset, np.zeros_like(goal), 0.1)
             # )
