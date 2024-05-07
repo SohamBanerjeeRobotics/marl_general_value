@@ -22,6 +22,13 @@ def pairwise_distances(A):
 
     return distances
 
+def fast_pairwise_distances(A):
+    assert A.ndim == 2
+    return jnp.linalg.norm(A[:, None] - A[None, :], axis=-1) + 100 * jnp.eye(A.shape[0])
+
+def ma_collision_done(dataset, safe_radius=0.3):
+    return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(bool)
+
 # TODO: We need to randomly sample for MA
 # but these rewards must be computed AFTER sampling
 def ma_collision_reward(dataset, safe_radius=0.3):
@@ -29,16 +36,14 @@ def ma_collision_reward(dataset, safe_radius=0.3):
     # Reward shape: [agent, *]
     #B, T, A, F = dataset['state'].shape
     #state_in = dataset['state'].reshape(B, A, F)
-    return jnp.sum(pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0) / dataset['state'].shape[0]
+    return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(jnp.float32) / dataset['state'].shape[0]
 
-def ma_collision_reward_wrapper(dataset, safe_radius=0.3, scale=1.0):
-    # Shape of dataset is [B, T, A, F]
-    B, T, A, F = dataset['state'].shape
-    state = {"state": dataset['state'].squeeze(1)}
-    reward = jax.vmap(ma_collision_reward, in_axes=(0, None))(state, safe_radius)
-    dataset['next_reward'] -= scale * reward.reshape(B, 1, A, 1)
-    return dataset
-
+def ma_collision_reward_and_done(state, reward, done, safe_radius=jnp.array(0.3), scale=jnp.array(0.5)):
+    collisions = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < safe_radius, axis=0), 1)
+    return (
+        reward - collisions.astype(jnp.float32) / state.shape[0] * scale, 
+        done | collisions.astype(bool)
+    )
 
 
 # It is actually harder than expected to come up with reward functions given just the state
@@ -49,10 +54,10 @@ def boundary_reward(dataset, e_bounds, n_bounds):
 
 def boundary_done(dataset, e_bounds, n_bounds):
     return (
-        (dataset["state"][...,STATE_IDX["e_pos"]] < e_bounds[0]) 
-        |  (dataset["state"][...,STATE_IDX["e_pos"]] > e_bounds[1])
-        | (dataset["state"][...,STATE_IDX["n_pos"]] < n_bounds[0])
-        | (dataset["state"][...,STATE_IDX["n_pos"]] > n_bounds[1])
+        (dataset["next_state"][...,STATE_IDX["e_pos"]] < e_bounds[0]) 
+        |  (dataset["next_state"][...,STATE_IDX["e_pos"]] > e_bounds[1])
+        | (dataset["next_state"][...,STATE_IDX["n_pos"]] < n_bounds[0])
+        | (dataset["next_state"][...,STATE_IDX["n_pos"]] > n_bounds[1])
     )
 
 def speed_reward(dataset):

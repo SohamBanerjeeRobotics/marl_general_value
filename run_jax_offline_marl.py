@@ -13,7 +13,7 @@ import wandb
 from modules import GeneralMAQNetwork, GeneralQNetwork, greedy_policy
 from losses import update_general_qnet, update_general_qnet_ma
 from tasks import add_rewards_to_dataset, make_language_navigation_tasks
-from rewards import ma_collision_reward, ma_collision_reward_wrapper
+from rewards import ma_collision_reward, ma_collision_done, ma_collision_reward_and_done
 
 
 
@@ -26,20 +26,20 @@ args = parser.parse_args()
 # opt setup
 config = {
     "seed": args.seed,
-    "lr": 0.00001,
+    "lr": 0.0001,
     "loss": "meanq",
-    "weight_decay": 0.00001,
-    "warmup_epochs": 1000,
+    "weight_decay": 0.0001,
+    "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
     "batch_size": 256,
-    "num_agents": 5,
+    "num_agents": 2,
     "tau": jnp.array([1/1000]),
     "epochs": 10_000,
     "eval_interval": 50,
     "eval_trials": 3,
     "q_config": {
-        "mlp_size": 1024,
-        "head_size": 1024,
+        "mlp_size": 64,
+        "head_size": 512,
         "dropout": 0.0,
         "ensemble_size": 2,
         "ensemble_reduce": "min",
@@ -53,6 +53,7 @@ if args.wandb:
     wandb.init(project='morlmarl', config=config)
 
 key = jax.random.PRNGKey(config["seed"])
+global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(1,2))
 
 lr_warmup = optax.linear_schedule(config["lr"] * 0.01, config["lr"], config["warmup_epochs"])
 lr_train = optax.constant_schedule(config["lr"])
@@ -137,7 +138,11 @@ for epoch in range(1, config["epochs"]):
         }
         ma_data_batch = {k: v.reshape(batch_size, config["num_agents"], -1) for k, v in ma_data_batch.items()}
         # Tack on custom reward for collisions which requires global state
-        #ma_data_batch["next_reward"] -= jnp.expand_dims(jax.jit(jax.vmap(ma_collision_reward))(ma_data_batch), -1)
+        r, d = global_fn(
+            ma_data_batch['next_state'], ma_data_batch['next_reward'], ma_data_batch['next_done']
+        )
+        ma_data_batch['next_reward'] = r
+        ma_data_batch['next_done'] = d
         q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
 
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"

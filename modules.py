@@ -136,6 +136,30 @@ class GraphLayer(eqx.Module):
         neighbors = jnp.sum(x, axis=0) - x
         return eqx.filter_vmap(self.conv)(x, neighbors)
 
+class SimpleGraphLayer(eqx.Module):
+    W: nn.Linear
+
+    def __init__(self, input_size, output_size, key):
+        keys = random.split(key, 2)
+        self.W = Block(2 * input_size, output_size, 0, key=keys[0])
+
+    def conv(self, root, neighbors):
+        # [A, F]
+        res = eqx.filter_vmap(self.W)(jnp.concatenate([root, neighbors], axis=-1))
+        # Agg
+        return res.mean(0)
+
+
+    def __call__(self, x):
+        # x should be of shape [Num_agents, S]
+        assert x.ndim == 2, "x dim: {}".format(x.shape)
+        num_agents = x.shape[0]
+        x = jnp.expand_dims(x, 1)
+        roots = jnp.repeat(x, num_agents, axis=1)
+        neighbors = roots.transpose(1, 0, 2)
+        out = eqx.filter_vmap(self.conv)(roots, neighbors)
+        return out
+
 class EdgeGraphLayer(eqx.Module):
     W: nn.Linear
 
@@ -177,8 +201,8 @@ class GeneralMAQNetwork(eqx.Module):
             self.gnn = None
             self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
         else:
-            self.gnn = EdgeGraphLayer(obs_size + task_size, config["mlp_size"], keys[0])
-            self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
+            self.gnn = EdgeGraphLayer(obs_size, config["mlp_size"], keys[0])
+            self.q = QHead(config["mlp_size"] + task_size, config["head_size"], act_size, config["dropout"], keys[2])
 
                     
     def __call__(self, x, task, key):
@@ -187,9 +211,9 @@ class GeneralMAQNetwork(eqx.Module):
         # We would need more memory (N^2) since neighbors would be different for each root
         assert x.ndim == 2 and task.ndim == 2, "x dim: {}, task dim: {}".format(x.shape, task.shape)
         net_keys = random.split(key, 3)
-        x = jnp.concatenate([x, task], axis=-1)
         if not self.debug:
             x = self.gnn(x)
+        x = jnp.concatenate([x, task], axis=-1)
         q = eqx.filter_vmap(self.q)(x, random.split(net_keys[2], x.shape[0]))
         return q
 
