@@ -21,6 +21,27 @@ def soft_update(network, target, tau):
     target = eqx.tree_inference(target, True)
     return target
 
+def general_critic_weighted_loss_ma(q_network, q_target, data, gamma, key):
+    """critic loss"""
+    # Shape[Agent, F]
+    agent_idx = jnp.arange(data["state"].shape[0])
+    q_value = q_network(
+        data["state"], data["task_embedding"], key=key
+    )
+    taken_q_value = q_value[agent_idx, data["action"].squeeze(1)]
+
+    next_q = jax.lax.stop_gradient(q_target(
+        data["next_state"], data["task_embedding"], key=key
+    ))
+    weighting = jax.nn.softmax(next_q, axis=1)
+
+    next_q = jnp.sum(next_q * weighting, axis=1)
+
+    target = data["next_reward"].squeeze(1) + (1.0 - data["next_done"]).squeeze(1) * gamma * next_q 
+    error = taken_q_value - target
+    td_error = huber(error)
+    return td_error.mean(), (td_error, taken_q_value, next_q)
+
 def general_critic_weighted_loss(q_network, q_target, data, gamma, key):
     """critic loss"""
     q_value = q_network(
@@ -127,7 +148,7 @@ def ma_mean_reduce(fn, *args, **kwargs):
     fn should be wrapped in eqx.filter_value_and_grad or jax.value_and_grad
     """
     outputs, grad = fn(*args, **kwargs)
-    reduced_grad = jax.tree_util.tree_map(lambda x: jnp.mean(x, axis=(0,1,2)), grad)
+    reduced_grad = jax.tree_util.tree_map(lambda x: jnp.mean(x, axis=(0)), grad)
     return outputs, reduced_grad
 
 
@@ -179,7 +200,7 @@ def vmap_batch(loss_fn):
         )
     ) 
 
-def vmap_agent(loss_fn):
+def vmap_ma(loss_fn):
     return eqx.filter_vmap(
         loss_fn, 
         in_axes=(
@@ -193,8 +214,8 @@ def vmap_agent(loss_fn):
                 "next_reward": 0,
                 "next_done": 0,
                 "next_state": 0,
-                "state": None,
-                "task_embedding": None,
+                "state": 0,
+                "task_embedding": 0,
             }, 
             # gamma
             None, 
@@ -245,17 +266,14 @@ def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, l
 
 def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau, key):
     """Updates the discrete Q network. This function will vmap over the task and batch dims."""
-    loss_fn = eqx.filter_value_and_grad(general_critic_loss, has_aux=True)
+    loss_fn = eqx.filter_value_and_grad(general_critic_weighted_loss_ma, has_aux=True)
     # [Batch, Task, Agent, *]
-    B, T, A = data['next_reward'].shape[:3]
-    keys = jax.random.split(key, B * T * A).reshape(B, T, A, -1)
+    B, A = data['next_reward'].shape[:2]
+    keys = jax.random.split(key, B)
 
     # We keep the data with singleton dims to help understand which dims map to which axes
     # but vmap does not handle singleton dims well, so we remove them here
     # Squeeze out Task dims
-    data = {
-        k: v.squeeze(1) if k in ["state", "next_state", "action"] else v for k, v in data.items() 
-    }
     # Squeeze out Batch dims, and give each agent a separate task
     # TODO: What about reward...?
     # Do we need to move agent dimension outside? There would be n! different task-agent permutations
@@ -263,12 +281,7 @@ def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau
     # Recall we are using a GNN, so do we care about permutations or the combination?
     # We care as GNN is just for the input. The rewards and tasks matter which agent (position) they are in
     # Easiest solution is to just sample reward/embedding pairs
-    data = {
-        k: jnp.tile(v.squeeze(0), (1, A, -1)) if k in ["task_embedding"] else v for k, v in data.items()
-    }
-
-    batch_loss_fn = vmap_batch(vmap_task(vmap_agent(loss_fn)))
-    breakpoint()
+    batch_loss_fn = vmap_ma(loss_fn)
     outputs, grad = ma_mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
     _, (td_error, q_value, q_target_value) = outputs
     updates, opt_state = opt.update(
