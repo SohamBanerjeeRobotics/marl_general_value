@@ -38,11 +38,13 @@ def ma_collision_reward(dataset, safe_radius=0.3):
     #state_in = dataset['state'].reshape(B, A, F)
     return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(jnp.float32) / dataset['state'].shape[0]
 
-def ma_collision_reward_and_done(state, reward, done, safe_radius=jnp.array(0.3), scale=jnp.array(0.5)):
+def ma_collision_reward_and_done(state, reward, done, safe_radius=jnp.array(0.3), scale=jnp.array(1.0)):
     collisions = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < safe_radius, axis=0), 1)
+    # TODO: We need to draw lines and see if the lines intersect
+    # the policy is abusing the 1s timesteps
     return (
         reward - collisions.astype(jnp.float32) / state.shape[0] * scale, 
-        done | collisions.astype(bool)
+        done #| collisions.astype(bool)
     )
 
 

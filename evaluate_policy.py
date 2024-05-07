@@ -159,6 +159,8 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
     }
 
 
+#global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(1,2))
+
 def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50, seed=0):
     from tasks import make_language_navigation_tasks
     from modules import GeneralMAQNetwork
@@ -214,6 +216,7 @@ def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=No
     data = rollout_policy(e, q_function, agent_tasks, config['num_agents'], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(agent_tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
+    #global_rewards, _ = globa_fn(data["state"], data[
     # TODO: Collision rewards
     # Now visualize
     frames = e.render_seq(data['state'], bgoals)

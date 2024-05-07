@@ -16,6 +16,7 @@ from tasks import add_rewards_to_dataset, make_language_navigation_tasks
 from rewards import ma_collision_reward, ma_collision_done, ma_collision_reward_and_done
 
 
+# TODO: We are reaching deadlocks because we cannot rely on the other agent making a speicifc move. This is a downside of the dataset
 
 # opt setup
 parser = argparse.ArgumentParser()
@@ -27,18 +28,18 @@ args = parser.parse_args()
 config = {
     "seed": args.seed,
     "lr": 0.0001,
-    "loss": "meanq",
+    "loss": "maxq",
     "weight_decay": 0.0001,
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
-    "batch_size": 256,
+    "batch_size": 64,
     "num_agents": 2,
-    "tau": jnp.array([1/1000]),
-    "epochs": 10_000,
-    "eval_interval": 50,
+    "tau": jnp.array([1/2000]),
+    "epochs": 100_000,
+    "eval_interval": 1000,
     "eval_trials": 3,
     "q_config": {
-        "mlp_size": 64,
+        "mlp_size": 512,
         "head_size": 512,
         "dropout": 0.0,
         "ensemble_size": 2,
@@ -69,6 +70,7 @@ q_function = GeneralMAQNetwork(
     act_size=config["act_size"], 
     config=config["q_config"], 
     key=key,
+    #debug=True,
 )
 q_target = GeneralMAQNetwork(
     obs_size=config["obs_size"], 
@@ -76,6 +78,7 @@ q_target = GeneralMAQNetwork(
     act_size=config["act_size"], 
     config=config["q_config"], 
     key=key,
+    #debug=True
 )
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
@@ -110,40 +113,40 @@ best_eval_return = -np.inf
 best_eval_distance = np.inf
 eval_return = -np.inf
 for epoch in range(1, config["epochs"]):
-    for i in range(num_batches):
-        key, task_key = jax.random.split(key)
-        start_idx = i * config["batch_size"]
-        end_idx = min((i + 1) * config["batch_size"], data_size)
-        batch_size = end_idx - start_idx
-        # 4000 C 5 is ~10^15 datapoints which is too much to materialize
-        # Instead, let us just sample
-        # But issue: HDF5 does not support random access, only sequential
-        # Solution, first sample a slice, then build MA batch
-        batch_idx = jnp.repeat(jnp.arange(start_idx, end_idx), config["num_agents"])
+    key, task_key = jax.random.split(key)
+#    start_idx = i * config["batch_size"]
+#    end_idx = min((i + 1) * config["batch_size"], data_size)
+#    batch_size = end_idx - start_idx
+    # 4000 C 5 is ~10^15 datapoints which is too much to materialize
+    # Instead, let us just sample
+    # But issue: HDF5 does not support random access, only sequential
+    # Solution, first sample a slice, then build MA batch
+    #batch_idx = jnp.repeat(jnp.arange(start_idx, end_idx), config["num_agents"])
+    batch_idx = jax.random.randint(task_key, (config["batch_size"] * config["num_agents"],), 0, data_size)
 
-        # Sample without replacement, but only along the agent axis
-        # This way, each agent has a unique task, but the task can appear multiple times across a batch
-        sample_keys = jax.random.split(task_key, batch_size)
-        sampled_task_idx = jax.vmap(jax.random.choice, in_axes=(0, None, None, None))(
-            sample_keys, dataset["task_embedding"].shape[1], (config["num_agents"],), False
-        ).reshape(-1)
-        # Batch will be of shape [B, A]
-        ma_data_batch = {
-            "next_reward": dataset["next_reward"][batch_idx, sampled_task_idx],
-            "next_done": dataset["next_done"][batch_idx, sampled_task_idx],
-            "task_embedding": dataset["task_embedding"][0, sampled_task_idx],
-            "state": dataset["state"][batch_idx],
-            "next_state": dataset["next_state"][batch_idx],
-            "action": dataset["action"][batch_idx],
-        }
-        ma_data_batch = {k: v.reshape(batch_size, config["num_agents"], -1) for k, v in ma_data_batch.items()}
-        # Tack on custom reward for collisions which requires global state
-        r, d = global_fn(
-            ma_data_batch['next_state'], ma_data_batch['next_reward'], ma_data_batch['next_done']
-        )
-        ma_data_batch['next_reward'] = r
-        ma_data_batch['next_done'] = d
-        q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
+    # Sample without replacement, but only along the agent axis
+    # This way, each agent has a unique task, but the task can appear multiple times across a batch
+    sample_keys = jax.random.split(task_key, config["batch_size"])
+    sampled_task_idx = jax.vmap(jax.random.choice, in_axes=(0, None, None, None))(
+        sample_keys, dataset["task_embedding"].shape[1], (config["num_agents"],), False
+    ).reshape(-1)
+    # Batch will be of shape [B, A]
+    ma_data_batch = {
+        "next_reward": dataset["next_reward"][batch_idx, sampled_task_idx],
+        "next_done": dataset["next_done"][batch_idx, sampled_task_idx],
+        "task_embedding": dataset["task_embedding"][0, sampled_task_idx],
+        "state": dataset["state"][batch_idx],
+        "next_state": dataset["next_state"][batch_idx],
+        "action": dataset["action"][batch_idx],
+    }
+    ma_data_batch = {k: v.reshape(config["batch_size"], config["num_agents"], -1) for k, v in ma_data_batch.items()}
+    # Tack on custom reward for collisions which requires global state
+    r, d = global_fn(
+        ma_data_batch['state'], ma_data_batch['next_reward'], ma_data_batch['next_done']
+    )
+    ma_data_batch['next_reward'] = r
+    ma_data_batch['next_done'] = d
+    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
 
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"
     pbar.set_description(out_str)

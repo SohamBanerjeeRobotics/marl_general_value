@@ -64,6 +64,24 @@ def general_cql_loss_ma(q_network, q_target, data, gamma, key, alpha=0.2):
     td_error = huber(error) + alpha * cql
     return td_error.mean(), (td_error, taken_q_value, next_q)
 
+def general_critic_loss_ma(q_network, q_target, data, gamma, key):
+    """critic loss"""
+    # Shape[Agent, F]
+    agent_idx = jnp.arange(data["state"].shape[0])
+    q_value = q_network(
+        data["state"], data["task_embedding"], key
+    )
+    taken_q_value = q_value[agent_idx, data["action"].squeeze(1)]
+
+    next_q = jax.lax.stop_gradient(q_target(
+        data["next_state"], data["task_embedding"], key=key
+    )).max(1)
+
+    target = data["next_reward"].squeeze(1) + (1.0 - data["next_done"]).squeeze(1) * gamma * next_q 
+    error = taken_q_value - target
+    td_error = huber(error)
+    return td_error.mean(), (td_error, taken_q_value, next_q)
+
 def general_critic_mean_loss_ma(q_network, q_target, data, gamma, key):
     """critic loss"""
     # Shape[Agent, F]

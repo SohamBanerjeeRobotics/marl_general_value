@@ -172,7 +172,7 @@ class EdgeGraphLayer(eqx.Module):
         diff_neighbors = neighbors - root
         res = eqx.filter_vmap(self.W)(jnp.concatenate([root, diff_neighbors], axis=-1))
         # Agg
-        return res.mean(0)
+        return res
 
 
     def __call__(self, x):
@@ -183,7 +183,7 @@ class EdgeGraphLayer(eqx.Module):
         roots = jnp.repeat(x, num_agents, axis=1)
         neighbors = roots.transpose(1, 0, 2)
         out = eqx.filter_vmap(self.conv)(roots, neighbors)
-        return out
+        return out.sum(1)
 
 
 class GeneralMAQNetwork(eqx.Module):
@@ -201,8 +201,9 @@ class GeneralMAQNetwork(eqx.Module):
             self.gnn = None
             self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
         else:
-            self.gnn = EdgeGraphLayer(obs_size, config["mlp_size"], keys[0])
-            self.q = QHead(config["mlp_size"] + task_size, config["head_size"], act_size, config["dropout"], keys[2])
+            #self.pre = Block(obs_size, config["mlp_size"], 0, keys[1])
+            self.gnn = EdgeGraphLayer(obs_size + task_size, config["mlp_size"], keys[0])
+            self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
 
                     
     def __call__(self, x, task, key):
@@ -211,9 +212,9 @@ class GeneralMAQNetwork(eqx.Module):
         # We would need more memory (N^2) since neighbors would be different for each root
         assert x.ndim == 2 and task.ndim == 2, "x dim: {}, task dim: {}".format(x.shape, task.shape)
         net_keys = random.split(key, 3)
+        x = jnp.concatenate([x, task], axis=-1)
         if not self.debug:
             x = self.gnn(x)
-        x = jnp.concatenate([x, task], axis=-1)
         q = eqx.filter_vmap(self.q)(x, random.split(net_keys[2], x.shape[0]))
         return q
 
