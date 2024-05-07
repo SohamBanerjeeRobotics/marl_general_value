@@ -49,10 +49,10 @@ class MARLEnv:
         next_state = jnp.clip(
             next_state,
             a_min=jnp.array([
-                ARENA_BOUNDS_N[0], ARENA_BOUNDS_E[0], -1, -1 
+                ARENA_BOUNDS_N[0] - 0.01, ARENA_BOUNDS_E[0] - 0.01, -1, -1 
             ]),
             a_max=jnp.array([
-                ARENA_BOUNDS_N[1], ARENA_BOUNDS_E[1], 1, 1
+                ARENA_BOUNDS_N[1] + 0.01, ARENA_BOUNDS_E[1] + 0.01, 1, 1
             ])
         )
         return next_state
@@ -67,10 +67,10 @@ class MARLEnv:
         screen_pos = (flipped + shift) * jnp.array([n_scale, e_scale]) + jnp.array([self.padding / 2, self.padding / 2]) 
         return screen_pos
 
-    def render_seq(self, agent_states, goal):
+    def render_seq(self, agent_states, goals):
         frames = []
         for t in range(agent_states.shape[0]):
-            frames.append(self.render(agent_states[t], goal))
+            frames.append(self.render(agent_states[t], goals[t]))
         video = np.stack(frames)
         return video
 
@@ -164,12 +164,73 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
         "action": jnp.expand_dims(action, -1),
     }
 
-def evaluate_policy(env_kwargs={}, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
+
+def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50, seed=0):
+    from tasks import make_language_navigation_tasks
+    from modules import GeneralMAQNetwork
+
+    key = jax.random.PRNGKey(seed)
+    if tasks is None:
+        tasks = make_language_navigation_tasks(eval_split)
+    if config is None:
+        config = {
+            "seed": 0,
+            "lr": 0.0001,
+            "loss": "meanq",
+            "weight_decay": 0.0001,
+            "gamma": jnp.array([0.95]),
+            "batch_size": 32,
+            "num_agents": 5,
+            "tau": jnp.array([1/1000]),
+            "epochs": 3000,
+            "eval_interval": 50,
+            "q_config": {
+                "mlp_size": 384,
+                "head_size": 384,
+                "ensemble_size": 1,
+                "dropout": 0.0,
+                "ensemble_size": 2,
+                "ensemble_reduce": "min",
+            },
+            "task_size": 768,
+            "obs_size": 4,
+            "act_size": 9,
+            "simulator_weights": "data/dynamics_model_weights.eqx",
+        }
+    if q_function is None:
+        q_function = GeneralMAQNetwork(
+            obs_size=config["obs_size"], 
+            task_size=config["task_size"], 
+            act_size=config["act_size"], 
+            config=config["q_config"], 
+            key=key
+        )
+    if model_path is not None:
+        q_function = eqx.tree_deserialise_leaves(model_path, q_function)
+
+    e = MARLEnv(**env_kwargs, num_agents=config["num_agents"])
+    agent_task_idx = jax.random.choice(key, tasks['task_embedding'].shape[0], (config['num_agents'],), replace=False)
+    agent_tasks = {
+        "task_embedding": tasks['task_embedding'][agent_task_idx],
+        "reward_function": tasks["reward_function"],
+        "done_fuction": tasks["done_function"],
+        "reward_kwargs": {"goal": tasks["reward_kwargs"]["goal"][agent_task_idx]}
+    } 
+
+    data = rollout_policy(e, q_function, agent_tasks, config['num_agents'], key, timesteps)
+    bgoals = jnp.repeat(jnp.expand_dims(agent_tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
+    rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
+    # Now visualize
+    frames = e.render_seq(data['state'], bgoals)
+    return data, bgoals, frames, rewards
+
+def evaluate_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
     from tasks import make_language_navigation_tasks
     from modules import GeneralQNetwork
 
     key = jax.random.PRNGKey(0)
-    tasks = make_language_navigation_tasks(eval_split)
+    if tasks is None:
+        tasks = make_language_navigation_tasks(eval_split)
     if config is None:
         config = {
             "seed": 0,
@@ -210,7 +271,7 @@ def evaluate_policy(env_kwargs={}, model_path=None, q_function=None, config=None
     bgoals = jnp.repeat(jnp.expand_dims(tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
     # Now visualize
-    frames = e.render_seq(data['state'], bgoals[0])
+    frames = e.render_seq(data['state'], bgoals)
     return data, bgoals, frames, rewards
 
 

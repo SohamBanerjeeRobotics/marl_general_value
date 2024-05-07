@@ -88,6 +88,17 @@ def make_language_navigation_tasks(eval=False):
     ]
     
     if eval:
+        command_locs = {
+            "west edge": np.array([0, ARENA_BOUNDS_E[0] + eps]),
+            "east edge": np.array([0, ARENA_BOUNDS_E[1] - eps]),
+            "south edge": np.array([ARENA_BOUNDS_N[0] + eps, 0]),
+            "north edge": np.array([ARENA_BOUNDS_N[1] - eps, 0]),
+        }
+        command_locs.update({
+            "south west corner": command_locs["west edge"] + command_locs["south edge"],
+            "south east corner": command_locs["east edge"] + command_locs["south edge"],
+            "north west corner": command_locs["west edge"] + command_locs["north edge"],
+        })
         command_locs = {**command_locs, **ne} 
         string_permutations = eval_string_permutations
     for c, goal in command_locs.items():

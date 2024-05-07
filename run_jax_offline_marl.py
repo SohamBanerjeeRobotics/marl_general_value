@@ -1,6 +1,6 @@
 import argparse
 from dynamics_model import StateTransitionModel
-from evaluate_policy import evaluate_policy
+from evaluate_policy import evaluate_ma_policy
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -26,19 +26,20 @@ args = parser.parse_args()
 # opt setup
 config = {
     "seed": args.seed,
-    "lr": 0.0001,
+    "lr": 0.00001,
     "loss": "meanq",
-    "weight_decay": 0.0001,
+    "weight_decay": 0.00001,
+    "warmup_epochs": 1000,
     "gamma": jnp.array([0.95]),
-    "batch_size": 32,
+    "batch_size": 256,
     "num_agents": 5,
     "tau": jnp.array([1/1000]),
-    "epochs": 3000,
+    "epochs": 10_000,
     "eval_interval": 50,
+    "eval_trials": 3,
     "q_config": {
-        "mlp_size": 384,
-        "head_size": 384,
-        "ensemble_size": 1,
+        "mlp_size": 1024,
+        "head_size": 1024,
         "dropout": 0.0,
         "ensemble_size": 2,
         "ensemble_reduce": "min",
@@ -53,7 +54,9 @@ if args.wandb:
 
 key = jax.random.PRNGKey(config["seed"])
 
-lr_schedule = optax.constant_schedule(config["lr"])
+lr_warmup = optax.linear_schedule(config["lr"] * 0.01, config["lr"], config["warmup_epochs"])
+lr_train = optax.constant_schedule(config["lr"])
+lr_schedule = optax.join_schedules([lr_warmup, lr_train], [config["warmup_epochs"]])
 opt = optax.chain(
     #optax.clip_by_global_norm(config["train"]["gradient_scale"]),
     optax.adamw(lr_schedule, weight_decay=config["weight_decay"]),
@@ -64,20 +67,21 @@ q_function = GeneralMAQNetwork(
     task_size=config["task_size"], 
     act_size=config["act_size"], 
     config=config["q_config"], 
-    key=key
+    key=key,
 )
 q_target = GeneralMAQNetwork(
     obs_size=config["obs_size"], 
     task_size=config["task_size"], 
     act_size=config["act_size"], 
     config=config["q_config"], 
-    key=key
+    key=key,
 )
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
 dataset_with_str = h5py.File("dataset.h5", "r")
 dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_string'} 
 data_size = dataset['next_reward'].shape[0]
+eval_tasks = make_language_navigation_tasks(True)
 
 simulator = StateTransitionModel(
     state_size=config["obs_size"], 
@@ -86,8 +90,6 @@ simulator = StateTransitionModel(
     key=jax.random.PRNGKey(0)
 )
 simulator = eqx.tree_deserialise_leaves(config["simulator_weights"], simulator)
-#eval_tasks = make_global_navigation_tasks(config["eval_episodes"])
-eval_tasks = make_language_navigation_tasks(eval=True)
 
 # B, num_goals, S
 #test_data = {k: v[:1] for k, v in dataset.items()}
@@ -106,9 +108,9 @@ pbar = tqdm.tqdm(total=config["epochs"])
 best_eval_return = -np.inf
 best_eval_distance = np.inf
 eval_return = -np.inf
-for epoch in range(config["epochs"]):
+for epoch in range(1, config["epochs"]):
     for i in range(num_batches):
-        key, state_key, task_key = jax.random.split(key, 3)
+        key, task_key = jax.random.split(key)
         start_idx = i * config["batch_size"]
         end_idx = min((i + 1) * config["batch_size"], data_size)
         batch_size = end_idx - start_idx
@@ -121,7 +123,9 @@ for epoch in range(config["epochs"]):
         # Sample without replacement, but only along the agent axis
         # This way, each agent has a unique task, but the task can appear multiple times across a batch
         sample_keys = jax.random.split(task_key, batch_size)
-        sampled_task_idx = jax.vmap(jax.random.choice, in_axes=(0, None, None))(sample_keys, dataset["task_embedding"].shape[1], (config["num_agents"],)).reshape(-1)
+        sampled_task_idx = jax.vmap(jax.random.choice, in_axes=(0, None, None, None))(
+            sample_keys, dataset["task_embedding"].shape[1], (config["num_agents"],), False
+        ).reshape(-1)
         # Batch will be of shape [B, A]
         ma_data_batch = {
             "next_reward": dataset["next_reward"][batch_idx, sampled_task_idx],
@@ -133,10 +137,10 @@ for epoch in range(config["epochs"]):
         }
         ma_data_batch = {k: v.reshape(batch_size, config["num_agents"], -1) for k, v in ma_data_batch.items()}
         # Tack on custom reward for collisions which requires global state
-        ma_data_batch["next_reward"] = jnp.expand_dims(jax.jit(jax.vmap(ma_collision_reward))(ma_data_batch), -1)
-        q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], key)
+        #ma_data_batch["next_reward"] -= jnp.expand_dims(jax.jit(jax.vmap(ma_collision_reward))(ma_data_batch), -1)
+        q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
 
-    out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
+    out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"
     pbar.set_description(out_str)
     pbar.update()
     if args.wandb:
@@ -150,9 +154,17 @@ for epoch in range(config["epochs"]):
     if epoch % config["eval_interval"] == 0:
         # Eval
         eval_q_function = eqx.nn.inference_mode(q_function)
-        data, goals, frames, rewards = evaluate_policy(q_function=eval_q_function)
-        mean_eval_distance = jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
-        eval_return = rewards.sum(0).mean()
+        mean_eval_distance = eval_return = 0
+        all_frames = []
+        for i in range(config["eval_trials"]):
+            data, goals, frames, rewards = evaluate_ma_policy(tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
+            mean_eval_distance += jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
+            eval_return += rewards.sum(0).mean()
+            all_frames.append(frames)
+
+        mean_eval_distance /= config["eval_trials"]
+        eval_return /= config["eval_trials"]
+        all_frames = jnp.concatenate(all_frames, axis=0)
 
         if eval_return > best_eval_return:
             best_eval_return = eval_return
@@ -160,7 +172,7 @@ for epoch in range(config["epochs"]):
             best_eval_distance = mean_eval_distance
 
         eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
-        video = jnp.transpose(frames, (0, 3, 1, 2))
+        video = jnp.transpose(all_frames, (0, 3, 1, 2))
         if args.wandb:
             video = wandb.Video(np.array(video), fps=10)
             wandb.log({

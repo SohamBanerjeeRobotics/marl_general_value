@@ -121,8 +121,8 @@ class GraphLayer(eqx.Module):
 
     def __init__(self, input_size, output_size, key):
         keys = random.split(key, 2)
-        self.W_root = nn.Linear(input_size, output_size, key=keys[0])
-        self.W_neighbor = nn.Linear(input_size, output_size, key=keys[1], use_bias=False)
+        self.W_root = Block(input_size, output_size, 0, key=keys[0])
+        self.W_neighbor = Block(input_size, output_size, 0, key=keys[1])
 
     def conv(self, root, neighbors):
         return self.W_root(root) + self.W_neighbor(neighbors)
@@ -130,23 +130,55 @@ class GraphLayer(eqx.Module):
     def __call__(self, x):
         # x should be of shape [Num_agents, S]
         assert x.ndim == 2, "x dim: {}".format(x.shape)
+        num_agents = x.shape[0]
         # Do not include self loops, as they are present in the root
         # results in [ sum(1, 2), sum(0, 2), sum(0, 1) ]
         neighbors = jnp.sum(x, axis=0) - x
         return eqx.filter_vmap(self.conv)(x, neighbors)
+
+class EdgeGraphLayer(eqx.Module):
+    W: nn.Linear
+
+    def __init__(self, input_size, output_size, key):
+        keys = random.split(key, 2)
+        self.W = Block(2 * input_size, output_size, 0, key=keys[0])
+
+    def conv(self, root, neighbors):
+        # [A, F]
+        diff_neighbors = neighbors - root
+        res = eqx.filter_vmap(self.W)(jnp.concatenate([root, diff_neighbors], axis=-1))
+        # Agg
+        return res.mean(0)
+
+
+    def __call__(self, x):
+        # x should be of shape [Num_agents, S]
+        assert x.ndim == 2, "x dim: {}".format(x.shape)
+        num_agents = x.shape[0]
+        x = jnp.expand_dims(x, 1)
+        roots = jnp.repeat(x, num_agents, axis=1)
+        neighbors = roots.transpose(1, 0, 2)
+        out = eqx.filter_vmap(self.conv)(roots, neighbors)
+        return out
 
 
 class GeneralMAQNetwork(eqx.Module):
     config: Dict[str, Any]
     gnn: GraphLayer
     q: eqx.Module
+    debug: bool
 
-    def __init__(self, obs_size, task_size, act_size, config, key):
+    def __init__(self, obs_size, task_size, act_size, config, key, debug=False):
         self.config = config
+        self.debug = debug
         keys = random.split(key, 3)
 
-        self.gnn = GraphLayer(obs_size, config["mlp_size"], keys[0])
-        self.q = QHead(config["mlp_size"] + task_size, config["head_size"], act_size, config["dropout"], keys[2])
+        if self.debug:
+            self.gnn = None
+            self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
+        else:
+            self.gnn = EdgeGraphLayer(obs_size + task_size, config["mlp_size"], keys[0])
+            self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
 
                     
     def __call__(self, x, task, key):
@@ -155,9 +187,9 @@ class GeneralMAQNetwork(eqx.Module):
         # We would need more memory (N^2) since neighbors would be different for each root
         assert x.ndim == 2 and task.ndim == 2, "x dim: {}, task dim: {}".format(x.shape, task.shape)
         net_keys = random.split(key, 3)
-        x = self.gnn(x)
-        #x = jnp.concatenate([x, jnp.repeat(task, x.shape[0], axis=0)], axis=1)
         x = jnp.concatenate([x, task], axis=-1)
+        if not self.debug:
+            x = self.gnn(x)
         q = eqx.filter_vmap(self.q)(x, random.split(net_keys[2], x.shape[0]))
         return q
 

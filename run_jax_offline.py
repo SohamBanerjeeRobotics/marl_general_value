@@ -24,7 +24,7 @@ args = parser.parse_args()
 config = {
     "seed": args.seed,
     "lr": 0.0001,
-    "loss": "meanq",
+    "loss": "weighted",
     "weight_decay": 0.0001,
     "gamma": jnp.array([0.95]),
     "batch_size": 32,
@@ -74,6 +74,7 @@ opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 dataset_with_str = h5py.File("dataset.h5", "r")
 dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_string'} 
 data_size = dataset['next_reward'].shape[0]
+eval_tasks = make_language_navigation_tasks(True)
 
 simulator = StateTransitionModel(
     state_size=config["obs_size"], 
@@ -82,8 +83,6 @@ simulator = StateTransitionModel(
     key=jax.random.PRNGKey(0)
 )
 simulator = eqx.tree_deserialise_leaves(config["simulator_weights"], simulator)
-#eval_tasks = make_global_navigation_tasks(config["eval_episodes"])
-eval_tasks = make_language_navigation_tasks(eval=True)
 
 # B, num_goals, S
 #test_data = {k: v[:1] for k, v in dataset.items()}
@@ -126,8 +125,8 @@ for epoch in range(1, config["epochs"]):
 
     if epoch % config["eval_interval"] == 0 or epoch == 1:
         # Eval
-        eval_q_function = eqx.nn.inference_mode(q_function)
-        data, goals, frames, rewards = evaluate_policy(q_function=eval_q_function)
+        eval_q_function = eqx.filter_vmap(eqx.nn.inference_mode(q_function), in_axes=(0, 0, None))
+        data, goals, frames, rewards = evaluate_policy(eval_tasks=eval_tasks, config=config, q_function=eval_q_function)
         mean_eval_distance = jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
         eval_return = rewards.sum(0).mean()
 

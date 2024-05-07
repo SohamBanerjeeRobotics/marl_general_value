@@ -29,7 +29,7 @@ def ma_collision_reward(dataset, safe_radius=0.3):
     # Reward shape: [agent, *]
     #B, T, A, F = dataset['state'].shape
     #state_in = dataset['state'].reshape(B, A, F)
-    return jnp.sum(pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0)
+    return jnp.sum(pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0) / dataset['state'].shape[0]
 
 def ma_collision_reward_wrapper(dataset, safe_radius=0.3, scale=1.0):
     # Shape of dataset is [B, T, A, F]
