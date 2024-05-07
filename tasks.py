@@ -16,25 +16,6 @@ prompt = "Agent 0,"
 #llm = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True)
 llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 
-def make_silly_tasks():
-    task_strings = [
-        "make like a banana and split.",
-        "dance like a noodle in a pot of boiling water.",
-        "tell your socks to go on an adventure in the dryer.",
-        "act like a drum and beat it.",
-        "chase rainbows until you find a pot of Wi-Fi.",
-        "roll like a jellybean on a downhill adventure.",
-        "sit like a mushroom and be a fun-guy.",
-        "do what makes you happy."
-    ]
-    emb = np.concatenate([llm.encode(t, to_numpy=True) for t in task_strings])
-    return {
-        "task_string": task_strings,
-        "task_embedding": emb,
-        "reward_function": None,
-        "reward_kwargs": {}
-    }
-
 
 def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
     task_strings = []
@@ -76,21 +57,6 @@ def make_language_navigation_tasks(eval=False):
         "east edge": np.array([0, ARENA_BOUNDS_E[1] - eps]),
         "south edge": np.array([ARENA_BOUNDS_N[0] + eps, 0]),
         "north edge": np.array([ARENA_BOUNDS_N[1] - eps, 0]),
-
-        # "west region": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
-        # "east region": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
-        # "south region": np.array([0, ARENA_BOUNDS_N[0] + eps]),
-        # "north region": np.array([0, ARENA_BOUNDS_N[1] - eps]),
-
-        # "west location": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
-        # "east location": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
-        # "south location": np.array([0, ARENA_BOUNDS_N[0] + eps]),
-        # "north location": np.array([0, ARENA_BOUNDS_N[1] - eps]),
-
-        # "west boundary": np.array([ARENA_BOUNDS_E[0] + eps, 0]),
-        # "east boundary": np.array([ARENA_BOUNDS_E[1] - eps, 0]),
-        # "south boundary": np.array([0, ARENA_BOUNDS_N[0] + eps]),
-        # "north boundary": np.array([0, ARENA_BOUNDS_N[1] - eps]),
     }
     command_locs.update({
         "south west corner": command_locs["west edge"] + command_locs["south edge"],
@@ -99,54 +65,15 @@ def make_language_navigation_tasks(eval=False):
         "east south corner": command_locs["east edge"] + command_locs["south edge"],
         "north west corner": command_locs["west edge"] + command_locs["north edge"],
         "west north corner": command_locs["west edge"] + command_locs["north edge"],
-
-        # "south west region": command_locs["west edge"] + command_locs["south edge"],
-        # "west south region": command_locs["west edge"] + command_locs["south edge"],
-        # "south east region": command_locs["east edge"] + command_locs["south edge"],
-        # "east south region": command_locs["east edge"] + command_locs["south edge"],
-        # "north west region": command_locs["west edge"] + command_locs["north edge"],
-        # "west north region": command_locs["west edge"] + command_locs["north edge"],
-
-        # "south west location": command_locs["west edge"] + command_locs["south edge"],
-        # "west south location": command_locs["west edge"] + command_locs["south edge"],
-        # "south east location": command_locs["east edge"] + command_locs["south edge"],
-        # "east south location": command_locs["east edge"] + command_locs["south edge"],
-        # "north west location": command_locs["west edge"] + command_locs["north edge"],
-        # "west north location": command_locs["west edge"] + command_locs["north edge"],
-
-        # "south west boundary": command_locs["west edge"] + command_locs["south edge"],
-        # "west south boundary": command_locs["west edge"] + command_locs["south edge"],
-        # "south east boundary": command_locs["east edge"] + command_locs["south edge"],
-        # "east south boundary": command_locs["east edge"] + command_locs["south edge"],
-        # "north west boundary": command_locs["west edge"] + command_locs["north edge"],
-        # "west north boundary": command_locs["west edge"] + command_locs["north edge"],
-        # #"north east edge": command_locs["east edge"] + command_locs["north edge"],
-        # #"east north edge": command_locs["east edge"] + command_locs["north edge"],
     })
     ne = {
             "north east corner": command_locs["east edge"] + command_locs["north edge"],
             #"east north corner": command_locs["east edge"] + command_locs["north edge"],
-
-            # "north east region": command_locs["east edge"] + command_locs["north edge"],
-            # #"east north region": command_locs["east edge"] + command_locs["north edge"],
-
-            # "north east location": command_locs["east edge"] + command_locs["north edge"],
-            # #"east north location": command_locs["east edge"] + command_locs["north edge"],
-
-            # "north east boundary": command_locs["east edge"] + command_locs["north edge"],
-            # #"east north boundary": command_locs["east edge"] + command_locs["north edge"],
-
-            "north edge": command_locs["north edge"],
-            "east edge": command_locs["east edge"],
-            "south edge": command_locs["south edge"],
-            "west edge": command_locs["west edge"],
-
         }
     string_permutations = [
         "navigate to the {}",
         "pathfind to the {}",
         "find your way to the {}",
-        #"go to the {}",
         "move to the {}",
         "your goal is the {}",
         "make your way to the {}",

@@ -153,12 +153,12 @@ class GeneralMAQNetwork(eqx.Module):
         # x should be of shape [Num_agents, S]
         # TODO: Should we do relative pos/vel here?
         # We would need more memory (N^2) since neighbors would be different for each root
-        assert x.ndim == 2 and task.ndim == 1, "x dim: {}, task dim: {}".format(x.shape, task.shape)
+        assert x.ndim == 2 and task.ndim == 2, "x dim: {}, task dim: {}".format(x.shape, task.shape)
         net_keys = random.split(key, 3)
         x = self.gnn(x)
-        breakpoint()
-        x = jnp.concatenate([x, jnp.repeat(task, x.shape[0], axis=0)], axis=1)
-        q = self.q(x, net_keys[2])
+        #x = jnp.concatenate([x, jnp.repeat(task, x.shape[0], axis=0)], axis=1)
+        x = jnp.concatenate([x, task], axis=-1)
+        q = eqx.filter_vmap(self.q)(x, random.split(net_keys[2], x.shape[0]))
         return q
 
 def greedy_policy(
