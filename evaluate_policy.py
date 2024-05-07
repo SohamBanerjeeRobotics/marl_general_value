@@ -138,17 +138,21 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
     embeds = tasks["task_embedding"]
 
     def scan_fn(carry, _):
-        agent_state, prev_action = carry
-        action = q_function(agent_state, embeds, jax.random.PRNGKey(0)).argmax(-1)
+        key, agent_state, prev_action = carry
+        key, reset_key = jax.random.split(key)
+        #action = q_function(agent_state, embeds, jax.random.PRNGKey(0)).argmax(-1)
+        action = jax.random.categorical(
+            reset_key, q_function(agent_state, embeds, jax.random.PRNGKey(0)) * 30.0
+        )
         next_state = env.step(agent_state, action)
-        return (next_state, action), (agent_state, action, next_state)
+        return (reset_key, next_state, action), (agent_state, action, next_state)
 
     key, reset_key = jax.random.split(key)
     if initial_state is None:
         agent_states = env.reset(reset_key)
     _, (state, action, next_state) = jax.lax.scan(
         f=scan_fn, 
-        init=(agent_states, jnp.zeros((agent_states.shape[0],), dtype=jnp.int32)),
+        init=(reset_key, agent_states, jnp.zeros((agent_states.shape[0],), dtype=jnp.int32)),
         xs=(), 
         length=timesteps
     )

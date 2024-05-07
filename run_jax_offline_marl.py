@@ -28,7 +28,7 @@ args = parser.parse_args()
 config = {
     "seed": args.seed,
     "lr": 0.0001,
-    "loss": "maxq",
+    "loss": "weighted",
     "weight_decay": 0.0001,
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
@@ -70,7 +70,6 @@ q_function = GeneralMAQNetwork(
     act_size=config["act_size"], 
     config=config["q_config"], 
     key=key,
-    #debug=True,
 )
 q_target = GeneralMAQNetwork(
     obs_size=config["obs_size"], 
@@ -78,7 +77,6 @@ q_target = GeneralMAQNetwork(
     act_size=config["act_size"], 
     config=config["q_config"], 
     key=key,
-    #debug=True
 )
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 

@@ -64,7 +64,9 @@ def boundary_done(dataset, e_bounds, n_bounds):
 
 def speed_reward(dataset):
     """Reward for going either slow or fast"""
-    return np.linalg.norm(dataset["state"]["vel"], axis=-1)
+    return np.linalg.norm(
+        dataset["state"][...,STATE_IDX["vel"]] + dataset["next_state"][...,STATE_IDX["vel"]], 
+    axis=-1)
 
 def goal_pos_reward(dataset, goal_pos):
     """Reward for relative distance to goal"""
