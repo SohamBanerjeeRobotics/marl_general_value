@@ -1,4 +1,6 @@
+import argparse
 from dynamics_model import StateTransitionModel
+from evaluate_policy import evaluate_policy
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -16,29 +18,38 @@ from rewards import ma_collision_reward, ma_collision_reward_wrapper
 
 
 # opt setup
+parser = argparse.ArgumentParser()
+parser.add_argument("--seed", type=int, default=0)
+parser.add_argument("-w", "--wandb", action="store_true")
+args = parser.parse_args()
+
+# opt setup
 config = {
-    "seed": 0,
+    "seed": args.seed,
     "lr": 0.0001,
-    "num_agents": 5,
+    "loss": "meanq",
     "weight_decay": 0.0001,
     "gamma": jnp.array([0.95]),
     "batch_size": 32,
+    "num_agents": 5,
     "tau": jnp.array([1/1000]),
     "epochs": 3000,
-    "eval_interval": 20,
-    "eval_episodes": 1,
+    "eval_interval": 50,
     "q_config": {
-        "mlp_size": 16,
+        "mlp_size": 384,
         "head_size": 384,
         "ensemble_size": 1,
         "dropout": 0.0,
+        "ensemble_size": 2,
+        "ensemble_reduce": "min",
     },
     "task_size": 768,
     "obs_size": 4,
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
 }
-wandb.init(project='morlmarl', config=config)
+if args.wandb:
+    wandb.init(project='morlmarl', config=config)
 
 key = jax.random.PRNGKey(config["seed"])
 
@@ -92,7 +103,9 @@ td_error = jnp.array([jnp.inf])
 
 num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
 pbar = tqdm.tqdm(total=config["epochs"])
-best_eval = -np.inf
+best_eval_return = -np.inf
+best_eval_distance = np.inf
+eval_return = -np.inf
 for epoch in range(config["epochs"]):
     for i in range(num_batches):
         key, state_key, task_key = jax.random.split(key, 3)
@@ -126,15 +139,39 @@ for epoch in range(config["epochs"]):
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.4f} qv: {qvalue.mean():0.4f} qtv: {qtarget_value.mean():0.4f}"
     pbar.set_description(out_str)
     pbar.update()
-    wandb.log({
-        "train/loss": td_error.mean(),
-        "train/epoch": epoch,
-        "train/q_value_mean": qvalue.mean(),
-        "train/q_target_value_mean": qtarget_value.mean()
-    })
+    if args.wandb:
+        wandb.log({
+            "train/loss": td_error.mean(),
+            "train/epoch": epoch,
+            "train/q_value_mean": qvalue.mean(),
+            "train/q_target_value_mean": qtarget_value.mean()
+        })
 
     if epoch % config["eval_interval"] == 0:
-        pass
+        # Eval
+        eval_q_function = eqx.nn.inference_mode(q_function)
+        data, goals, frames, rewards = evaluate_policy(q_function=eval_q_function)
+        mean_eval_distance = jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
+        eval_return = rewards.sum(0).mean()
+
+        if eval_return > best_eval_return:
+            best_eval_return = eval_return
+        if mean_eval_distance < best_eval_distance:
+            best_eval_distance = mean_eval_distance
+
+        eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
+        video = jnp.transpose(frames, (0, 3, 1, 2))
+        if args.wandb:
+            video = wandb.Video(np.array(video), fps=10)
+            wandb.log({
+                "eval/mean_return": eval_return,
+                "eval/mean_distance": mean_eval_distance,
+                "eval/video": video,
+                "eval/best_return": best_eval_return,
+                "eval/best_distance": best_eval_distance,
+                "train/epoch": epoch,
+            }, step=epoch)
+        
         
 
 

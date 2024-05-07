@@ -141,9 +141,11 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
 
     def scan_fn(carry, _):
         agent_state, prev_action = carry
-        action = eqx.filter_vmap(greedy_policy, in_axes=(None, 0, 0, None))(
-            q_function, agent_state, embeds, jax.random.PRNGKey(0)
-        )
+        action = q_function(agent_state, embeds, jax.random.PRNGKey(0)).argmax(-1)
+        # else:
+        #     action = eqx.filter_vmap(greedy_policy, in_axes=(None, 0, 0, None))(
+        #         q_function, agent_state, embeds, jax.random.PRNGKey(0)
+        #     )
         next_state = env.step(agent_state, action)
         return (next_state, action), (agent_state, action, next_state)
 
