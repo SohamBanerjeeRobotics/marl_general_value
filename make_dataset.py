@@ -10,7 +10,9 @@ if __name__ == '__main__':
         "data/robomaster_collect_1714734360.csv",
         "data/robomaster_collect_1714735377.csv",
         "data/robomaster_collect_1714736377.csv",
-        "data/robomaster_collect_1714737295.csv"
+        "data/robomaster_collect_1714737295.csv",
+        "data/robomaster_collect_1715178400.csv",
+        "data/robomaster_collect_1715179339.csv",
     ]
     data, data_size = dataset_from_csv(datasets)
     #tasks = make_global_navigation_tasks(2_000)
