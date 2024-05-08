@@ -160,6 +160,7 @@ class SimpleGraphLayer(eqx.Module):
         out = eqx.filter_vmap(self.conv)(roots, neighbors)
         return out
 
+
 class EdgeGraphLayer(eqx.Module):
     W: nn.Linear
 
@@ -202,7 +203,7 @@ class GeneralMAQNetwork(eqx.Module):
             self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
         else:
             #self.pre = Block(obs_size, config["mlp_size"], 0, keys[1])
-            self.gnn = EdgeGraphLayer(obs_size + task_size, config["mlp_size"], keys[0])
+            self.gnn = SimpleGraphLayer(obs_size + task_size, config["mlp_size"], keys[0])
             self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
 
                     

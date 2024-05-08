@@ -140,10 +140,10 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
     def scan_fn(carry, _):
         key, agent_state, prev_action = carry
         key, reset_key = jax.random.split(key)
-        #action = q_function(agent_state, embeds, jax.random.PRNGKey(0)).argmax(-1)
-        action = jax.random.categorical(
-            reset_key, q_function(agent_state, embeds, jax.random.PRNGKey(0)) * 30.0
-        )
+        action = q_function(agent_state, embeds, jax.random.PRNGKey(0)).argmax(-1)
+        #action = jax.random.categorical(
+        #    reset_key, q_function(agent_state, embeds, jax.random.PRNGKey(0)) * 50.0
+        #)
         next_state = env.step(agent_state, action)
         return (reset_key, next_state, action), (agent_state, action, next_state)
 
