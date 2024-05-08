@@ -90,14 +90,14 @@ ma_config = {
 
 # Model config and setup
 ma_q_function = GeneralMAQNetwork(
-    obs_size=config["obs_size"], 
-    task_size=config["task_size"], 
-    act_size=config["act_size"], 
-    config=config["q_config"], 
+    obs_size=ma_config["obs_size"], 
+    task_size=ma_config["task_size"], 
+    act_size=ma_config["act_size"], 
+    config=ma_config["q_config"], 
     key=jax.random.PRNGKey(0)
 )
-ma_q_function = eqx.tree_deserialise_leaves(f"models/ne-0-950-1.94.eqx", q_function)
+ma_q_function = eqx.tree_deserialise_leaves(f"models/ne-nagents-2-seed-0-epoch-63000-return--24.08.eqx", ma_q_function)
 
 def ma_policy_wrapper(ma_q_function, state, task_embedding):
-    q_value = ma_q_function(state, task_embedding)
+    q_value = ma_q_function(state, task_embedding, jax.random.PRNGKey(0))
     return q_value.argmax(axis=-1)

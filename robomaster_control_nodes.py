@@ -40,7 +40,7 @@ class RoboMasterBase(Node):
 
     def setup(self):
         self.max_time = 900;  # seconds, expt duration
-        self.robot_names = ["robomaster_1"]
+        self.robot_names = ["robomaster_1", "robomaster_2"]
         self.n_robots = len(self.robot_names)
         # self.states = {n: [] for n in self.robot_names}
         # self.actions = {n: [] for n in self.robot_names}
@@ -83,7 +83,7 @@ class RoboMasterBase(Node):
     def commander_timer_cb(self):
         for r in range(len(self.robots)):
             if not self.robots[r].ready:
-                print("Waiting for state..")
+                print(f"Waiting for state for robot {self.robot_names[r]}..")
                 if self.print_help_once:
                     print("Av. keys: ", RControl.mappings.keys())
                     self.print_help_once = False
@@ -97,11 +97,11 @@ class RoboMasterBase(Node):
         self.states.append(states)
 
         action_idx = self.get_action_idx(states)
-        action_vel = np.stack(ACTION_MAPPING[idx] for idx in action_idx)
+        action_vel = np.stack([ACTION_MAPPING[idx.item()] for idx in action_idx], axis=0)
         self.actions.append(action_idx)
         self.action_vels.append(action_vel)
 
-        action_str = [list(ACTION_IDX.keys())[idx] for idx in action_idx]
+        action_str = [list(ACTION_IDX.keys())[idx.item()] for idx in action_idx]
         print(
             f"{self.mytime}/{self.max_time}s\n"
             #f"action: {ACTION_MAPPING[action_idx]}"
@@ -110,10 +110,11 @@ class RoboMasterBase(Node):
             f"state (pn/pe/ve/vn): {states}"
         )
 
-        rstate = ReferenceState()
-        rstate.vn = action_vel[0].item()
-        rstate.ve = action_vel[1].item()
-        self.ref_pubs[r].publish(rstate)
+        for r in range(len(self.robots)):
+            rstate = ReferenceState()
+            rstate.vn = action_vel[r, 0].item()
+            rstate.ve = action_vel[r, 1].item()
+            self.ref_pubs[r].publish(rstate)
 
         # book-keeping
         self.mytime += self.timer_dt
@@ -176,42 +177,33 @@ class RoboMasterEval(RoboMasterBase):
         self.setup()
         self.task_idx = list(range(len(self.robots)))
         self.task_timer = 0
-        self.max_task_time = 20
+        self.max_task_time = 15
 
     def get_action_idx(self, state):
         #prompt_str = list(RControl.mappings.keys())[self.task_idx]
         prompt_strs = [
             list(RControl.mappings.keys())[idx]
-            for idx in range(len(self.robots))
+            for idx in self.task_idx
         ]
         #embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
-        embeddings = [
+        embeddings = np.stack([
             RControl.mappings[prompt_str]['embedding']
             for prompt_str in prompt_strs 
-        ]
-        # goals = [
-        #     RControl.mappings[prompt_str]['goal']
-        #     for prompt_str in prompt_strs 
-        # ]
+        ], axis=0)
 
-                             
-        # if np.linalg.norm(state[:2] - goal) <= 0.3:
-        #     print("Completed task!")
-        #     self.task_idx = (self.task_idx + 1) % len(RControl.mappings)
-        #     prompt_str = list(RControl.mappings.keys())[self.task_idx]
-        #     embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
-
-        action_idx = RControl.policy_wrapper(
-            RControl.q_function,
+        action_idx = RControl.ma_policy_wrapper(
+            RControl.ma_q_function,
             state, 
             embeddings,
-        ).item()
+        )
         self.task_timer += 1
-        if self.task_timer == self.max_task_time:
+        if self.task_timer >= self.max_task_time:
             print("Next task!")
-            self.task_idx = [(idx + 1) % len(RControl.mappings) for idx in self.task_idx]
+            #self.task_idx = [(idx + 1) % len(RControl.mappings) for idx in self.task_idx]
+            self.task_idx = np.random.choice(len(RControl.mappings), len(self.robots), replace=False)
+            self.task_timer = 0
         print(
-            f"Task: {prompt_strs}"
+                f"Task: {prompt_strs} ({self.task_timer:.0f}/{self.max_task_time:.0f}s)"
         )
         return action_idx
 
