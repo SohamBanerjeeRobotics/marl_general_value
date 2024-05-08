@@ -57,6 +57,14 @@ def make_language_navigation_tasks(eval=False):
         "east edge": np.array([0, ARENA_BOUNDS_E[1] - eps]),
         "south edge": np.array([ARENA_BOUNDS_N[0] + eps, 0]),
         "north edge": np.array([ARENA_BOUNDS_N[1] - eps, 0]),
+
+        "left edge": np.array([0, ARENA_BOUNDS_E[0] + eps]),
+        "right edge": np.array([0, ARENA_BOUNDS_E[1] - eps]),
+        "bottom edge": np.array([ARENA_BOUNDS_N[0] + eps, 0]),
+        "top edge": np.array([ARENA_BOUNDS_N[1] - eps, 0]),
+
+        "lower edge": np.array([ARENA_BOUNDS_N[0] + eps, 0]),
+        "upper edge": np.array([ARENA_BOUNDS_N[1] - eps, 0]),
     }
     command_locs.update({
         "south west corner": command_locs["west edge"] + command_locs["south edge"],
@@ -65,6 +73,29 @@ def make_language_navigation_tasks(eval=False):
         "east south corner": command_locs["east edge"] + command_locs["south edge"],
         "north west corner": command_locs["west edge"] + command_locs["north edge"],
         "west north corner": command_locs["west edge"] + command_locs["north edge"],
+
+        "SW corner": command_locs["west edge"] + command_locs["south edge"],
+        "SE corner": command_locs["east edge"] + command_locs["south edge"],
+        "NW corner": command_locs["west edge"] + command_locs["north edge"],
+        "NE corner": command_locs["east edge"] + command_locs["north edge"],
+
+        "bottom left corner": command_locs["west edge"] + command_locs["south edge"],
+        "left bottom corner": command_locs["west edge"] + command_locs["south edge"],
+        "bottom right corner": command_locs["east edge"] + command_locs["south edge"],
+        "right bottom corner": command_locs["east edge"] + command_locs["south edge"],
+        "top left corner": command_locs["west edge"] + command_locs["north edge"],
+        "left top corner": command_locs["west edge"] + command_locs["north edge"],
+        "top right corner": command_locs["east edge"] + command_locs["north edge"],
+        "right top corner": command_locs["east edge"] + command_locs["north edge"],
+
+        "lower left corner": command_locs["west edge"] + command_locs["south edge"],
+        "left lower corner": command_locs["west edge"] + command_locs["south edge"],
+        "lower right corner": command_locs["east edge"] + command_locs["south edge"],
+        "right lower corner": command_locs["east edge"] + command_locs["south edge"],
+        "upper left corner": command_locs["west edge"] + command_locs["north edge"],
+        "left upper corner": command_locs["west edge"] + command_locs["north edge"],
+        "upper right corner": command_locs["east edge"] + command_locs["north edge"],
+        "right upper corner": command_locs["east edge"] + command_locs["north edge"],
     })
     ne = {
             "north east corner": command_locs["east edge"] + command_locs["north edge"],
@@ -119,10 +150,10 @@ def make_language_navigation_tasks(eval=False):
         # TODO: Add boundary reward
         return (
             relative_goal_pos_reward(dataset, goal) 
-            0.1 * speed_reward(dataset) * relative_goal_pos_reward(dataset, goal),
+            + speed_reward(dataset) * relative_goal_pos_reward(dataset, goal)
             #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
             #+ goal_pos_done(dataset, goal, 0.1)
-            - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
     def done_fn(dataset, goal):
