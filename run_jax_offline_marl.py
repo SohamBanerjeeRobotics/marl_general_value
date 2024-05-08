@@ -13,7 +13,7 @@ import wandb
 from modules import GeneralMAQNetwork, GeneralQNetwork, greedy_policy
 from losses import update_general_qnet, update_general_qnet_ma
 from tasks import add_rewards_to_dataset, make_language_navigation_tasks
-from rewards import ma_collision_reward, ma_collision_done, ma_collision_reward_and_done
+from rewards import ma_collision_reward_and_done
 
 
 # TODO: We are reaching deadlocks because we cannot rely on the other agent making a speicifc move. This is a downside of the dataset
@@ -33,7 +33,7 @@ config = {
     "weight_decay": 0.0001,
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
-    "batch_size": 256 // num_agents,
+    "batch_size": 256,
     "num_agents": num_agents,
     "tau": jnp.array([1/2000]),
     "epochs": 100_000,
@@ -178,7 +178,7 @@ for epoch in range(1, config["epochs"]):
         if mean_eval_distance < best_eval_distance:
             best_eval_distance = mean_eval_distance
 
-        eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
+        eqx.tree_serialise_leaves(f"models/ne-nagents-{config['num_agents']}-seed-{config['seed']}-epoch-{epoch}-return-{eval_return:0.2f}.eqx", q_function)
         video = jnp.transpose(all_frames, (0, 3, 1, 2))
         if args.wandb:
             video = wandb.Video(np.array(video), fps=10)

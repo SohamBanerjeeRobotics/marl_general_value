@@ -1,5 +1,5 @@
 import copy
-from constants import ACTION_IDX
+from constants import ACTION_IDX, ROBOT_DIAMETER
 from dynamics_model import StateTransitionModel
 import equinox as eqx
 import jax.numpy as jnp
@@ -89,7 +89,7 @@ class MARLEnv:
             ]
         cross_length = 0.05 * self.scale
         x_length = 0.033 * self.scale
-        agent_radius = 0.15 * (self.scale) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
+        agent_radius = 0.5 * ROBOT_DIAMETER * (self.scale) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
 
         self.screen.fill("gray")
         self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)

@@ -4,7 +4,7 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from constants import STATE_IDX
+from constants import STATE_IDX, ROBOT_DIAMETER
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
 def pairwise_distances(A):
@@ -76,32 +76,19 @@ def segment_distance(starts1, ends1, starts2, ends2):
 
 
 
-def segment_collision(state, next_state, safe_radius):
+def segment_collision(state, next_state, ROBOT_DIAMETER):
     segment_a_start = state[:, :2]
     segment_a_end = next_state[:, :2]
     segment_b_start = state[:, :2]
     segment_b_end = next_state[:, :2]
     res = segment_distance(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
-    collisions = (res < safe_radius).sum(-1)
+    collisions = (res < ROBOT_DIAMETER).sum(-1)
     return collisions
     
      
-
-def ma_collision_done(dataset, safe_radius=jnp.array(0.3)):
-    return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(bool)
-
-# TODO: We need to randomly sample for MA
-# but these rewards must be computed AFTER sampling
-def ma_collision_reward(dataset, safe_radius=0.3):
-    # Dataset shape: [agent, *]
-    # Reward shape: [agent, *]
-    #B, T, A, F = dataset['state'].shape
-    #state_in = dataset['state'].reshape(B, A, F)
-    return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(jnp.float32) / dataset['state'].shape[0]
-
-def ma_collision_reward_and_done(state, next_state, reward, done, safe_radius=jnp.array(0.3)):
-    overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < safe_radius, axis=0), 1)
-    collisions = jnp.expand_dims(segment_collision(state, next_state, safe_radius), 1)
+def ma_collision_reward_and_done(state, next_state, reward, done):
+    overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < ROBOT_DIAMETER, axis=0), 1)
+    collisions = jnp.expand_dims(segment_collision(state, next_state, ROBOT_DIAMETER), 1)
     # TODO: We need to draw lines and see if the lines intersect
     # the policy is abusing the 1s timesteps
     return (

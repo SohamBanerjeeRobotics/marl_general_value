@@ -46,3 +46,4 @@ ACTION_MAPPING = {ACTION_IDX[s].item(): ACTION_VEL[s] for s in ACTION_IDX}
 
 ARENA_BOUNDS_N = (-1.9, 1.9)
 ARENA_BOUNDS_E = (-1.9, 1.9)
+ROBOT_DIAMETER = 0.5 # meters

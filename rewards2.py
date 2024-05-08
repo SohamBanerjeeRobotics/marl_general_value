@@ -2,7 +2,7 @@
 
 import jax.numpy as jnp
 
-from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, STATE_IDX
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, STATE_IDX, ROBOT_DIAMETER
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
 
