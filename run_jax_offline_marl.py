@@ -33,7 +33,7 @@ config = {
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
     "batch_size": 64,
-    "num_agents": 2,
+    "num_agents": 5,
     "tau": jnp.array([1/2000]),
     "epochs": 100_000,
     "eval_interval": 1000,
@@ -54,7 +54,7 @@ if args.wandb:
     wandb.init(project='morlmarl', config=config)
 
 key = jax.random.PRNGKey(config["seed"])
-global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(1,2))
+global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(2,3))
 
 lr_warmup = optax.linear_schedule(config["lr"] * 0.01, config["lr"], config["warmup_epochs"])
 lr_train = optax.constant_schedule(config["lr"])
@@ -140,7 +140,7 @@ for epoch in range(1, config["epochs"]):
     ma_data_batch = {k: v.reshape(config["batch_size"], config["num_agents"], -1) for k, v in ma_data_batch.items()}
     # Tack on custom reward for collisions which requires global state
     r, d = global_fn(
-        ma_data_batch['state'], ma_data_batch['next_reward'], ma_data_batch['next_done']
+        ma_data_batch['state'], ma_data_batch['next_state'], ma_data_batch['next_reward'], ma_data_batch['next_done']
     )
     ma_data_batch['next_reward'] = r
     ma_data_batch['next_done'] = d

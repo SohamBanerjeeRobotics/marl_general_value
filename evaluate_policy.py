@@ -7,6 +7,7 @@ import jax
 import numpy as np
 from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, ACTION_VEL
 from rewards2 import point_navigation_reward
+from rewards import ma_collision_reward_and_done
 import pygame
 
 
@@ -163,7 +164,7 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
     }
 
 
-#global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(1,2))
+global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done))
 
 def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50, seed=0):
     from tasks import make_language_navigation_tasks
@@ -220,6 +221,7 @@ def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=No
     data = rollout_policy(e, q_function, agent_tasks, config['num_agents'], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(agent_tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
+    rewards, _ = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards))
     #global_rewards, _ = globa_fn(data["state"], data[
     # TODO: Collision rewards
     # Now visualize

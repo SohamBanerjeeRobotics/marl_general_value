@@ -26,7 +26,68 @@ def fast_pairwise_distances(A):
     assert A.ndim == 2
     return jnp.linalg.norm(A[:, None] - A[None, :], axis=-1) + 100 * jnp.eye(A.shape[0])
 
-def ma_collision_done(dataset, safe_radius=0.3):
+
+import numpy as np
+from numpy.linalg import norm
+
+
+import numpy as np
+from numpy.linalg import norm
+
+
+import numpy as np
+from numpy.linalg import norm
+
+def segment_distance(starts1, ends1, starts2, ends2):
+    # Calculate direction vectors for each segment
+    dirs1 = ends1 - starts1
+    dirs2 = ends2 - starts2
+    
+    # Prepare for broadcasting
+    p = starts1[:, jnp.newaxis, :]
+    q = starts2[jnp.newaxis, :, :]
+    r = dirs1[:, jnp.newaxis, :]
+    s = dirs2[jnp.newaxis, :, :]
+    
+    # Cross product of direction vectors in 2D
+    r_cross_s = jnp.cross(r, s, axis=2)
+    
+    # Compute the vector between the starts of the line segments
+    pq = q - p
+    
+    # Avoid divide by zero by replacing zeros with the smallest positive float
+    safe_denominator = jnp.where(r_cross_s == 0, jnp.finfo(float).eps, r_cross_s)
+    
+    # Distance calculation based on the cross product in 2D
+    distance = jnp.abs(jnp.cross(pq, r, axis=2) / safe_denominator)
+
+    # Clip the distances calculated to the length of each segment
+    projected_length1 = jnp.sum(pq * r, axis=2) / jnp.sum(r * r, axis=2)
+    projected_length2 = jnp.sum(pq * s, axis=2) / jnp.sum(s * s, axis=2)
+    projected_length1_clipped = jnp.clip(projected_length1, 0, 1)
+    projected_length2_clipped = jnp.clip(projected_length2, 0, 1)
+
+    closest_p = p + projected_length1_clipped[..., jnp.newaxis] * r
+    closest_q = q + projected_length2_clipped[..., jnp.newaxis] * s
+
+    final_distances = jnp.linalg.norm(closest_p - closest_q, axis=2)
+    
+    return final_distances
+
+
+
+def segment_collision(state, next_state, safe_radius):
+    segment_a_start = state[:, :2]
+    segment_a_end = next_state[:, :2]
+    segment_b_start = state[:, :2]
+    segment_b_end = next_state[:, :2]
+    res = segment_distance(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
+    collisions = (res < safe_radius).sum(-1)
+    return collisions
+    
+     
+
+def ma_collision_done(dataset, safe_radius=jnp.array(0.3)):
     return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(bool)
 
 # TODO: We need to randomly sample for MA
@@ -38,13 +99,18 @@ def ma_collision_reward(dataset, safe_radius=0.3):
     #state_in = dataset['state'].reshape(B, A, F)
     return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(jnp.float32) / dataset['state'].shape[0]
 
-def ma_collision_reward_and_done(state, reward, done, safe_radius=jnp.array(0.3), scale=jnp.array(1.0)):
-    collisions = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < safe_radius, axis=0), 1)
+def ma_collision_reward_and_done(state, next_state, reward, done, safe_radius=jnp.array(0.3)):
+    overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < safe_radius, axis=0), 1)
+    collisions = jnp.expand_dims(segment_collision(state, next_state, safe_radius), 1)
     # TODO: We need to draw lines and see if the lines intersect
     # the policy is abusing the 1s timesteps
     return (
-        reward - collisions.astype(jnp.float32) / state.shape[0] * scale, 
-        done #| collisions.astype(bool)
+        reward 
+        - 0.5 * collisions.astype(jnp.float32) # Prevent collisions
+        - 0.5 * overlap.astype(jnp.float32), # Prevent overlapping
+        done 
+#        | collisions.astype(bool)
+#        | overlap.astype(bool) 
     )
 
 
