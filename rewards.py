@@ -109,8 +109,8 @@ def ma_collision_reward_and_done(state, next_state, reward, done, safe_radius=jn
         - 0.5 * collisions.astype(jnp.float32) # Prevent collisions
         - 0.5 * overlap.astype(jnp.float32), # Prevent overlapping
         done 
-#        | collisions.astype(bool)
-#        | overlap.astype(bool) 
+        #| collisions.astype(bool)
+        #| overlap.astype(bool) 
     )
 
 

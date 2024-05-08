@@ -25,6 +25,7 @@ parser.add_argument("-w", "--wandb", action="store_true")
 args = parser.parse_args()
 
 # opt setup
+num_agents = 3
 config = {
     "seed": args.seed,
     "lr": 0.0001,
@@ -32,8 +33,8 @@ config = {
     "weight_decay": 0.0001,
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
-    "batch_size": 64,
-    "num_agents": 5,
+    "batch_size": 256 // num_agents,
+    "num_agents": num_agents,
     "tau": jnp.array([1/2000]),
     "epochs": 100_000,
     "eval_interval": 1000,

@@ -89,6 +89,7 @@ class MARLEnv:
             ]
         cross_length = 0.05 * self.scale
         x_length = 0.033 * self.scale
+        agent_radius = 0.15 * (self.scale) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
 
         self.screen.fill("gray")
         self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
@@ -97,7 +98,7 @@ class MARLEnv:
                 self.screen, 
                 color[i],
                 agent_pos[i].tolist(), 
-                0.05 * self.scale,
+                agent_radius
             )
         for i in range(len(agent_pos)):
             if i % 2 == 0:
@@ -221,7 +222,7 @@ def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=No
     data = rollout_policy(e, q_function, agent_tasks, config['num_agents'], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(agent_tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
-    rewards, _ = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards))
+    rewards, _ = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards, dtype=bool))
     #global_rewards, _ = globa_fn(data["state"], data[
     # TODO: Collision rewards
     # Now visualize
