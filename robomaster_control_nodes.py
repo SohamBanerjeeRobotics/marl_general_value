@@ -42,6 +42,9 @@ class RoboMasterBase(Node):
         self.max_time = 900;  # seconds, expt duration
         self.robot_names = ["robomaster_1"]
         self.n_robots = len(self.robot_names)
+        # self.states = {n: [] for n in self.robot_names}
+        # self.actions = {n: [] for n in self.robot_names}
+        # self.action_vels = {n: [] for n in self.robot_names}
 
         self.robots = [None]*self.n_robots
         self.state_subs = [None]*self.n_robots
@@ -53,8 +56,6 @@ class RoboMasterBase(Node):
             self.ref_pubs[idx] = self.create_publisher(ReferenceState, name+"/reference_state", 1)
             print("Initialised: ", name)
 
-        self.RefState = ReferenceState();
-    
         self.print_help_once = True;
         self.mytime = 0.0
         freq = 1.0                 # Hz
@@ -66,7 +67,6 @@ class RoboMasterBase(Node):
 
     def get_action_idx(self, state):
         raise NotImplementedError()
-
 
     def safe_action(self, state, action_idx):
         if state[0] < ARENA_BOUNDS_N[0] and action_idx in [ACTION_IDX["S"], ACTION_IDX["SW"], ACTION_IDX["SE"]]:
@@ -81,41 +81,46 @@ class RoboMasterBase(Node):
             return True
 
     def commander_timer_cb(self):
-        r = 0
-        if not self.robots[r].ready:
-            print("Waiting for state..")
-            if self.print_help_once:
-                print("Av. keys: ", RControl.mappings.keys())
-                self.print_help_once = False
-            return
+        for r in range(len(self.robots)):
+            if not self.robots[r].ready:
+                print("Waiting for state..")
+                if self.print_help_once:
+                    print("Av. keys: ", RControl.mappings.keys())
+                    self.print_help_once = False
+                return
 
-        state = self.robots[r].state
-        state = np.array([state.pn, state.pe, state.vn, state.ve])
-        self.states.append(state)
+        states = [
+            np.array([r.state.pn, r.state.pe, r.state.vn, r.state.ve])
+            for r in self.robots
+        ]
+        states = np.stack(states, axis=0)
+        self.states.append(states)
 
-        action_idx = self.get_action_idx(state)
-        action_vel = ACTION_MAPPING[action_idx]
+        action_idx = self.get_action_idx(states)
+        action_vel = np.stack(ACTION_MAPPING[idx] for idx in action_idx)
         self.actions.append(action_idx)
         self.action_vels.append(action_vel)
 
-        action_str = list(ACTION_IDX.keys())[action_idx]
+        action_str = [list(ACTION_IDX.keys())[idx] for idx in action_idx]
         print(
             f"{self.mytime}/{self.max_time}s\n"
-            f"action: {ACTION_MAPPING[action_idx]}"
-            f"/{action_str}\n"
-            f"state (pn/pe/ve/vn): {state[0]:.2f}/{state[1]:.2f}/{state[2]:.2f}/{state[3]:.2f}" 
+            #f"action: {ACTION_MAPPING[action_idx]}"
+            f"action: {action_str}\n"
+            #f"state (pn/pe/ve/vn): {state[0]:.2f}/{state[1]:.2f}/{state[2]:.2f}/{state[3]:.2f}" 
+            f"state (pn/pe/ve/vn): {states}"
         )
 
-        self.RefState.vn = action_vel[0].item()
-        self.RefState.ve = action_vel[1].item()
-        self.ref_pubs[r].publish(self.RefState)
+        rstate = ReferenceState()
+        rstate.vn = action_vel[0].item()
+        rstate.ve = action_vel[1].item()
+        self.ref_pubs[r].publish(rstate)
 
         # book-keeping
         self.mytime += self.timer_dt
         if self.mytime > self.max_time:
-            self.RefState.vn = 0.0
-            self.RefState.ve = 0.0
-            self.ref_pubs[r].publish(self.RefState)
+            for p in self.ref_pubs:
+                rstate = ReferenceState()
+                p.publish(rstate)
             self.teardown()
             rclpy.shutdown()
 
@@ -169,25 +174,44 @@ class RoboMasterEval(RoboMasterBase):
     def __init__(self):
         super().__init__("robomaster_eval")
         self.setup()
-        self.task_idx = 0
+        self.task_idx = list(range(len(self.robots)))
+        self.task_timer = 0
+        self.max_task_time = 20
 
     def get_action_idx(self, state):
-        prompt_str = list(RControl.mappings.keys())[self.task_idx];
-        embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
+        #prompt_str = list(RControl.mappings.keys())[self.task_idx]
+        prompt_strs = [
+            list(RControl.mappings.keys())[idx]
+            for idx in range(len(self.robots))
+        ]
+        #embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
+        embeddings = [
+            RControl.mappings[prompt_str]['embedding']
+            for prompt_str in prompt_strs 
+        ]
+        # goals = [
+        #     RControl.mappings[prompt_str]['goal']
+        #     for prompt_str in prompt_strs 
+        # ]
 
-        if np.linalg.norm(state[:2] - goal) < 0.3:
-            print("Completed task!")
-            self.task_idx = (self.task_idx + 1) % len(RControl.mappings)
-            prompt_str = list(RControl.mappings.keys())[self.task_idx]
-            embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
+                             
+        # if np.linalg.norm(state[:2] - goal) <= 0.3:
+        #     print("Completed task!")
+        #     self.task_idx = (self.task_idx + 1) % len(RControl.mappings)
+        #     prompt_str = list(RControl.mappings.keys())[self.task_idx]
+        #     embedding, goal = RControl.mappings[prompt_str]['embedding'], RControl.mappings[prompt_str]['goal']
 
         action_idx = RControl.policy_wrapper(
             RControl.q_function,
             state, 
-            embedding,
+            embeddings,
         ).item()
+        self.task_timer += 1
+        if self.task_timer == self.max_task_time:
+            print("Next task!")
+            self.task_idx = [(idx + 1) % len(RControl.mappings) for idx in self.task_idx]
         print(
-            f"Task: {prompt_str}"
+            f"Task: {prompt_strs}"
         )
         return action_idx
 
@@ -219,15 +243,3 @@ class RoboMasterEval(RoboMasterBase):
             "action": action,
         })
         df.to_csv(f"data/robomaster_eval_{int(time.time())}.csv")
-
-def main():
-    rclpy.init();
-    eval_node = RobomasterEval();
-
-    rclpy.spin(eval_node);
-
-    eval_node.destroy_node();
-    rclpy.shutdown();
-
-if __name__ == '__main__':
-    main();

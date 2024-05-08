@@ -126,6 +126,10 @@ def boundary_done(dataset, e_bounds, n_bounds):
         |  (dataset["next_state"][...,STATE_IDX["e_pos"]] > e_bounds[1])
         | (dataset["next_state"][...,STATE_IDX["n_pos"]] < n_bounds[0])
         | (dataset["next_state"][...,STATE_IDX["n_pos"]] > n_bounds[1])
+        | (dataset["state"][...,STATE_IDX["e_pos"]] < e_bounds[0]) 
+        | (dataset["state"][...,STATE_IDX["e_pos"]] > e_bounds[1])
+        | (dataset["state"][...,STATE_IDX["n_pos"]] < n_bounds[0])
+        | (dataset["state"][...,STATE_IDX["n_pos"]] > n_bounds[1])
     )
 
 def speed_reward(dataset):
