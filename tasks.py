@@ -16,7 +16,8 @@ prompt = "Agent,"
 #llm = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True)
 #llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
 #llm = SentenceTransformer('sentence-transformers/LaBSE')
-llm = SentenceTransformer('Supabase/gte-small')
+#llm = SentenceTransformer('Supabase/gte-small')
+llm = SentenceTransformer('thenlper/gte-base')
 
 
 def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):

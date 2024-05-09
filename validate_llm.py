@@ -12,15 +12,17 @@ import wandb
 
 llms = {
     #AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu"): "WhereIsAI/UAE-Large-V1",
-    SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True): "Alibaba-NLP/gte-large-en-v1.5",
-    SentenceTransformer('paraphrase-MiniLM-L6-v2'): "paraphrase-MiniLM-L6-v2",
-    SentenceTransformer('all-MiniLM-L6-v2'): "all-MiniLM-L6-v2",
-    SentenceTransformer('all-distilroberta-v1'): "all-distilroberta-v1",
-    SentenceTransformer('sentence-transformers/all-mpnet-base-v2'): "sentence-transformers/all-mpnet-base-v2",
-    SentenceTransformer('sentence-transformers/LaBSE'): "sentence-transformers/LaBSE",
-    SentenceTransformer('paraphrase-albert-small-v2'): "paraphrase-albert-small-v2",
-    SentenceTransformer('Supabase/gte-small'): "Supabase/gte-small",
-    SentenceTransformer("mixedbread-ai/mxbai-embed-large-v1", truncate_dim=512): "mixedbread-ai/mxbai-embed-large-v1",
+#    SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True): "Alibaba-NLP/gte-large-en-v1.5",
+#    SentenceTransformer('paraphrase-MiniLM-L6-v2'): "paraphrase-MiniLM-L6-v2",
+#    SentenceTransformer('all-MiniLM-L6-v2'): "all-MiniLM-L6-v2",
+#    SentenceTransformer('all-distilroberta-v1'): "all-distilroberta-v1",
+#    SentenceTransformer('sentence-transformers/all-mpnet-base-v2'): "sentence-transformers/all-mpnet-base-v2",
+#    SentenceTransformer('sentence-transformers/LaBSE'): "sentence-transformers/LaBSE",
+#    SentenceTransformer('paraphrase-albert-small-v2'): "paraphrase-albert-small-v2",
+#    SentenceTransformer('Supabase/gte-small'): "Supabase/gte-small",
+#    SentenceTransformer('thenlper/gte-base'): "thenlper/gte-base",
+    SentenceTransformer('thenlper/gte-large'): "thenlper/gte-large",
+    #SentenceTransformer("mixedbread-ai/mxbai-embed-large-v1", truncate_dim=512): "mixedbread-ai/mxbai-embed-large-v1",
 }
 
 
