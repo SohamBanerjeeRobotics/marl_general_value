@@ -21,7 +21,7 @@ def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.3
+    eps = 0.5
     for i in range(num_tasks):
         x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
         y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
