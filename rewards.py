@@ -151,7 +151,7 @@ def test_segment_collision():
     # Extra zero (collision) for self-distance
     res = segment_collision(state, next_state, 1.0)
 
-def segment_collision(state, next_state, ROBOT_DIAMETER):
+def segment_collision(state, next_state, radius):
     # Shape [A, 2]
     A = state.shape[0]
     segment_a_start = jnp.repeat(state[:, None, :2], A, axis=1)
@@ -160,22 +160,18 @@ def segment_collision(state, next_state, ROBOT_DIAMETER):
     segment_b_end = segment_a_end.transpose(1, 0, 2)
     # Identity will always be zero
     res = jax.vmap(jax.vmap(segment_distance))(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
-    collisions = (res < ROBOT_DIAMETER).sum(-1)
+    # Subtract 1 because there will always be a self collision
+    collisions = (res < radius).sum(-1) - 1.0
     return collisions
     
      
 def ma_collision_reward_and_done(state, next_state, reward, done):
-   # overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < ROBOT_DIAMETER, axis=0), 1)
     collisions = jnp.expand_dims(segment_collision(state, next_state, ROBOT_DIAMETER), 1)
     # TODO: We need to draw lines and see if the lines intersect
     # the policy is abusing the 1s timesteps
     return (
-        reward
-        - collisions.astype(jnp.float32) / state.shape[0], # Prevent collisions
-        #- 0.5 * overlap.astype(jnp.float32), # Prevent overlapping
-        done 
-        | collisions.astype(bool)
-        #| overlap.astype(bool) 
+        reward - collisions.astype(jnp.float32),
+        done | collisions.astype(bool)
     )
 
 

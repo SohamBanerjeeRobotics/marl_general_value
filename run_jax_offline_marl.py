@@ -1,6 +1,6 @@
 import argparse
 from dynamics_model import StateTransitionModel
-from evaluate_policy import evaluate_ma_policy
+from evaluate_policy import evaluate_ma_policy, MARLEnv
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -86,13 +86,7 @@ dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_str
 data_size = dataset['next_reward'].shape[0]
 eval_tasks = make_language_navigation_tasks(True)
 
-simulator = StateTransitionModel(
-    state_size=config["obs_size"], 
-    num_actions=config["act_size"], 
-    dropout=0, 
-    key=jax.random.PRNGKey(0)
-)
-simulator = eqx.tree_deserialise_leaves(config["simulator_weights"], simulator)
+simulator = MARLEnv(num_agents=config["num_agents"])
 
 # B, num_goals, S
 #test_data = {k: v[:1] for k, v in dataset.items()}
@@ -155,7 +149,9 @@ for epoch in range(1, config["epochs"]):
             "train/loss": td_error.mean(),
             "train/epoch": epoch,
             "train/q_value_mean": qvalue.mean(),
-            "train/q_target_value_mean": qtarget_value.mean()
+            "train/q_target_value_mean": qtarget_value.mean(),
+            "train/done_density": ma_data_batch['next_done'].mean(),
+            "train/reward": ma_data_batch['next_reward'].mean(),
         })
 
     if epoch % config["eval_interval"] == 0:
@@ -164,11 +160,12 @@ for epoch in range(1, config["epochs"]):
         mean_eval_distance = eval_return = eval_collisions = 0
         all_frames = []
         for i in range(config["eval_trials"]):
-            data, goals, frames, rewards, dones = evaluate_ma_policy(tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
+            data, goals, frames, rewards, dones = evaluate_ma_policy(env=simulator, tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
             mean_eval_distance += jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
             eval_return += rewards.sum(0).mean()
             eval_collisions += dones.sum() / 2
             all_frames.append(frames)
+
 
         mean_eval_distance /= config["eval_trials"]
         eval_return /= config["eval_trials"]
