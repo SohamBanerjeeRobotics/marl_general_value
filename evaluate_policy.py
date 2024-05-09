@@ -30,18 +30,19 @@ class MARLEnv:
         self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
 
     def reset(self, key, eps=0.1):
-        keys = jax.random.split(key, 3)
-        vel = jax.random.choice(keys[0], self.initial_velocities, shape=(self.num_agents, 2)) 
-        vel = vel * jax.random.uniform(keys[1], shape=(self.num_agents, 2), minval=0.0, maxval=1.0)
-        pos = jax.random.uniform(
-            keys[2], shape=(self.num_agents, 2,), 
-            minval=jnp.array([
-                ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_E[0] + eps
-            ]), 
-            maxval=jnp.array([
-                ARENA_BOUNDS_N[1] - eps, ARENA_BOUNDS_E[1] - eps
-            ])  
-        )
+        keys = jax.random.split(key, 6)
+        # Zero vel prevents initial collisions
+        vel = jnp.zeros((self.num_agents, 2))
+        #vel = jax.random.choice(keys[0], self.initial_velocities, shape=(self.num_agents, 2)) 
+        #vel = vel * jax.random.uniform(keys[1], shape=(self.num_agents, 2), minval=0.0, maxval=1.0)
+
+        # Ensure agents do not start overlapped
+        n_coords = jnp.arange(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps, ROBOT_DIAMETER) 
+        e_coords = jnp.arange(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps, ROBOT_DIAMETER) 
+
+        n_pos = jax.random.choice(keys[2], n_coords, (self.num_agents,))
+        e_pos = jax.random.choice(keys[3], n_coords, (self.num_agents,))
+        pos = jnp.stack([n_pos, e_pos], axis=-1)
         agent_state = jnp.concatenate([pos, vel], axis=-1)
         return agent_state
 
@@ -222,12 +223,12 @@ def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=No
     data = rollout_policy(e, q_function, agent_tasks, config['num_agents'], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(agent_tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
-    rewards, _ = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards, dtype=bool))
+    rewards, dones = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards, dtype=bool))
     #global_rewards, _ = globa_fn(data["state"], data[
     # TODO: Collision rewards
     # Now visualize
     frames = e.render_seq(data['state'], bgoals)
-    return data, bgoals, frames, rewards
+    return data, bgoals, frames, rewards, dones
 
 def evaluate_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
     from tasks import make_language_navigation_tasks

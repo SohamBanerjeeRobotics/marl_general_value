@@ -54,9 +54,6 @@ def general_cql_loss_ma(q_network, q_target, data, gamma, key, alpha=0.2):
     next_q = jax.lax.stop_gradient(q_target(
         data["next_state"], data["task_embedding"], key=key
     ))
-    weighting = jax.nn.softmax(next_q, axis=1)
-
-    next_q = jnp.sum(next_q * weighting, axis=1)
 
     target = data["next_reward"].squeeze(1) + (1.0 - data["next_done"]).squeeze(1) * gamma * next_q 
     cql = jax.nn.logsumexp(q_value) - taken_q_value

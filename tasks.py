@@ -149,17 +149,15 @@ def make_language_navigation_tasks(eval=False):
         # Output shape: [B, G]
         # TODO: Add boundary reward
         return (
-            relative_goal_pos_reward(dataset, goal) 
-            + speed_reward(dataset) * relative_goal_pos_reward(dataset, goal)
-            #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
-            #+ goal_pos_done(dataset, goal, 0.1)
-            - COLLISION_SCALE * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            relative_goal_pos_reward(dataset, goal) / POSITION_SCALE
+            + speed_reward(dataset) * relative_goal_pos_reward(dataset, goal) / (POSITION_SCALE * VELOCITY_SCALE)
+            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
     def done_fn(dataset, goal):
         return (
             jnp.repeat(boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1), goal.shape[1], axis=-1)
-            | goal_pos_done(dataset, goal, 0.1)
+            # | goal_pos_done(dataset, goal, 0.1)
             #     #& goal_vel_done(dataset, np.zeros_like(goal), 0.1)
             # )
         )

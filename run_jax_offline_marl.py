@@ -38,10 +38,10 @@ config = {
     "tau": jnp.array([1/2000]),
     "epochs": 100_000,
     "eval_interval": 1000,
-    "eval_trials": 3,
+    "eval_trials": 5,
     "q_config": {
-        "mlp_size": 512,
-        "head_size": 512,
+        "mlp_size": 1024,
+        "head_size": 1024,
         "dropout": 0.0,
         "ensemble_size": 2,
         "ensemble_reduce": "min",
@@ -161,12 +161,13 @@ for epoch in range(1, config["epochs"]):
     if epoch % config["eval_interval"] == 0:
         # Eval
         eval_q_function = eqx.nn.inference_mode(q_function)
-        mean_eval_distance = eval_return = 0
+        mean_eval_distance = eval_return = eval_collisions = 0
         all_frames = []
         for i in range(config["eval_trials"]):
-            data, goals, frames, rewards = evaluate_ma_policy(tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
+            data, goals, frames, rewards, dones = evaluate_ma_policy(tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
             mean_eval_distance += jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
             eval_return += rewards.sum(0).mean()
+            eval_collisions += dones.sum() / 2
             all_frames.append(frames)
 
         mean_eval_distance /= config["eval_trials"]
@@ -188,6 +189,7 @@ for epoch in range(1, config["epochs"]):
                 "eval/video": video,
                 "eval/best_return": best_eval_return,
                 "eval/best_distance": best_eval_distance,
+                "eval/collisions": eval_collisions,
                 "train/epoch": epoch,
             }, step=epoch)
         

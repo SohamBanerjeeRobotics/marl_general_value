@@ -4,9 +4,10 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, STATE_IDX, ROBOT_DIAMETER
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, STATE_IDX, ROBOT_DIAMETER, VELOCITY
 
-COLLISION_SCALE = np.linalg.norm(np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,0] - np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,1])
+POSITION_SCALE = np.linalg.norm(np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,0] - np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,1])
+VELOCITY_SCALE = 2 * VELOCITY
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
 def pairwise_distances(A):
@@ -164,16 +165,16 @@ def segment_collision(state, next_state, ROBOT_DIAMETER):
     
      
 def ma_collision_reward_and_done(state, next_state, reward, done):
-    overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < ROBOT_DIAMETER, axis=0), 1)
+   # overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < ROBOT_DIAMETER, axis=0), 1)
     collisions = jnp.expand_dims(segment_collision(state, next_state, ROBOT_DIAMETER), 1)
     # TODO: We need to draw lines and see if the lines intersect
     # the policy is abusing the 1s timesteps
     return (
         reward
-        - COLLISION_SCALE * collisions.astype(jnp.float32) / state.shape[0], # Prevent collisions
+        - collisions.astype(jnp.float32) / state.shape[0], # Prevent collisions
         #- 0.5 * overlap.astype(jnp.float32), # Prevent overlapping
         done 
-        #| collisions.astype(bool)
+        | collisions.astype(bool)
         #| overlap.astype(bool) 
     )
 
