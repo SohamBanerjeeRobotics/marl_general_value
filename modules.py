@@ -10,6 +10,9 @@ import math
 def leaky_relu(x, key=None):
     return jax.nn.leaky_relu(x)
 
+def gelu(x, key=None):
+    return jax.nn.gelu(x)
+
 def default_init(key, linear, scale=1.0, zero_bias=False, fixed_bias=None):
     """Default init used in pytorch"""
     lim = math.sqrt(scale / linear.in_features)
@@ -136,6 +139,7 @@ class GraphLayer(eqx.Module):
         neighbors = jnp.sum(x, axis=0) - x
         return eqx.filter_vmap(self.conv)(x, neighbors)
 
+
 class SimpleGraphLayer(eqx.Module):
     W: nn.Linear
 
@@ -145,6 +149,7 @@ class SimpleGraphLayer(eqx.Module):
 
     def conv(self, root, neighbors):
         # [A, F]
+        # Discard index 0 because it is [root, root]
         res = eqx.filter_vmap(self.W)(jnp.concatenate([root, neighbors], axis=-1))
         # Agg
         return res.mean(0)

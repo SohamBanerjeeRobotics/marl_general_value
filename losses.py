@@ -32,7 +32,7 @@ def general_critic_weighted_loss_ma(q_network, q_target, data, gamma, key):
 
     next_q = jax.lax.stop_gradient(q_target(
         data["next_state"], data["task_embedding"], key=key
-    ))#.mean(1)
+    ))
     weighting = jax.nn.softmax(next_q, axis=1)
 
     next_q = jnp.sum(next_q * weighting, axis=1)

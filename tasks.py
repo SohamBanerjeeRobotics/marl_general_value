@@ -10,11 +10,13 @@ import h5py
 random.seed(0)
 
 #prompt = "You are a holonomic wheeled robot in a multirobot system,"
-prompt = "Agent 0,"
+prompt = "Agent,"
 #llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu")
 #llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 #llm = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True)
-llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+#llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+#llm = SentenceTransformer('sentence-transformers/LaBSE')
+llm = SentenceTransformer('Supabase/gte-small')
 
 
 def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
@@ -45,7 +47,7 @@ def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
     }
 
 
-def make_language_navigation_tasks(eval=False):
+def make_language_navigation_tasks(eval=False, llm=llm):
     task_strings = []
     task_embeddings = []
     goals = []

@@ -29,24 +29,24 @@ num_agents = 3
 config = {
     "seed": args.seed,
     "lr": 0.0001,
-    "loss": "weighted",
+    "loss": "meanq",
     "weight_decay": 0.0001,
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
     "batch_size": 256,
     "num_agents": num_agents,
     "tau": jnp.array([1/2000]),
-    "epochs": 100_000,
+    "epochs": 200_000,
     "eval_interval": 1000,
     "eval_trials": 5,
     "q_config": {
-        "mlp_size": 1024,
-        "head_size": 1024,
+        "mlp_size": 384,
+        "head_size": 384,
         "dropout": 0.0,
         "ensemble_size": 2,
         "ensemble_reduce": "min",
     },
-    "task_size": 768,
+    "task_size": 384,
     "obs_size": 4,
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
@@ -106,16 +106,12 @@ best_eval_return = -np.inf
 best_eval_distance = np.inf
 eval_return = -np.inf
 for epoch in range(1, config["epochs"]):
-    key, task_key = jax.random.split(key)
-#    start_idx = i * config["batch_size"]
-#    end_idx = min((i + 1) * config["batch_size"], data_size)
-#    batch_size = end_idx - start_idx
+    key, batch_key, task_key = jax.random.split(key, 3)
     # 4000 C 5 is ~10^15 datapoints which is too much to materialize
     # Instead, let us just sample
     # But issue: HDF5 does not support random access, only sequential
     # Solution, first sample a slice, then build MA batch
-    #batch_idx = jnp.repeat(jnp.arange(start_idx, end_idx), config["num_agents"])
-    batch_idx = jax.random.randint(task_key, (config["batch_size"] * config["num_agents"],), 0, data_size)
+    batch_idx = jax.random.randint(batch_key, (config["batch_size"] * config["num_agents"],), 0, data_size)
 
     # Sample without replacement, but only along the agent axis
     # This way, each agent has a unique task, but the task can appear multiple times across a batch
