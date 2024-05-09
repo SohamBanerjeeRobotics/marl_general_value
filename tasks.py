@@ -153,7 +153,7 @@ def make_language_navigation_tasks(eval=False):
             + speed_reward(dataset) * relative_goal_pos_reward(dataset, goal)
             #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
             #+ goal_pos_done(dataset, goal, 0.1)
-            - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            - COLLISION_SCALE * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
     def done_fn(dataset, goal):

@@ -4,7 +4,9 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from constants import STATE_IDX, ROBOT_DIAMETER
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, STATE_IDX, ROBOT_DIAMETER
+
+COLLISION_SCALE = np.linalg.norm(np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,0] - np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,1])
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
 def pairwise_distances(A):
@@ -109,9 +111,20 @@ def test_segment_distance():
     start3 = jnp.array([-1, 1])
     end3 = jnp.array([-1, -1])
 
+    # Overlap, distance should be 0
+    start4 = jnp.array([0, 0])
+    end4 = jnp.array([2, 0])
+
+    # Reverse overlap, distance should be 0
+    start5 = jnp.array([2, 0])
+    end5 = jnp.array([0, 0])
+
     d0 = segment_distance(start0, end0, start1, end1)
     d1 = segment_distance(start0, end0, start2, end2)
     d2 = segment_distance(start0, end0, start3, end3)
+    d3 = segment_distance(start0, end0, start4, end4)
+    d4 = segment_distance(start0, end0, start5, end5)
+    breakpoint()
     assert d0 == 0
     assert d1 == 1
     assert d2 == 1
@@ -157,7 +170,7 @@ def ma_collision_reward_and_done(state, next_state, reward, done):
     # the policy is abusing the 1s timesteps
     return (
         reward
-        - collisions.astype(jnp.float32), # Prevent collisions
+        - COLLISION_SCALE * collisions.astype(jnp.float32) / state.shape[0], # Prevent collisions
         #- 0.5 * overlap.astype(jnp.float32), # Prevent overlapping
         done 
         #| collisions.astype(bool)
@@ -218,5 +231,5 @@ def goal_vel_done(dataset, goal_vel, threshold=0.1):
     return goal_vel_reward(dataset, goal_vel) < threshold
 
 if __name__ == '__main__':
-    #test_segment_distance()
-    test_segment_collision()
+    test_segment_distance()
+    #test_segment_collision()
