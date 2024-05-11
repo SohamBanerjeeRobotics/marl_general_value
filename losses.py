@@ -21,9 +21,10 @@ def soft_update(network, target, tau):
     target = eqx.tree_inference(target, True)
     return target
 
-def general_critic_weighted_loss_ma(q_network, q_target, data, gamma, key):
+def general_critic_weighted_loss_ma(q_network, q_target, data, gamma, key, loss_kwargs):
     """critic loss"""
     # Shape[Agent, F]
+    tau = loss_kwargs.get('weighted_tau') 
     agent_idx = jnp.arange(data["state"].shape[0])
     q_value = q_network(
         data["state"], data["task_embedding"], key
@@ -33,7 +34,7 @@ def general_critic_weighted_loss_ma(q_network, q_target, data, gamma, key):
     next_q = jax.lax.stop_gradient(q_target(
         data["next_state"], data["task_embedding"], key=key
     ))
-    weighting = jax.nn.softmax(next_q, axis=1)
+    weighting = jax.nn.softmax(next_q / tau, axis=1)
 
     next_q = jnp.sum(next_q * weighting, axis=1)
 
@@ -42,9 +43,10 @@ def general_critic_weighted_loss_ma(q_network, q_target, data, gamma, key):
     td_error = huber(error)
     return td_error.mean(), (td_error, taken_q_value, next_q)
 
-def general_cql_loss_ma(q_network, q_target, data, gamma, key, alpha=0.2):
+def general_cql_loss_ma(q_network, q_target, data, gamma, key, loss_kwargs):
     """critic loss"""
     # Shape[Agent, F]
+    alpha = loss_kwargs.get('cql_alpha') 
     agent_idx = jnp.arange(data["state"].shape[0])
     q_value = q_network(
         data["state"], data["task_embedding"], key
@@ -53,7 +55,7 @@ def general_cql_loss_ma(q_network, q_target, data, gamma, key, alpha=0.2):
 
     next_q = jax.lax.stop_gradient(q_target(
         data["next_state"], data["task_embedding"], key=key
-    ))
+    )).max(-1)
 
     target = data["next_reward"].squeeze(1) + (1.0 - data["next_done"]).squeeze(1) * gamma * next_q 
     cql = jax.nn.logsumexp(q_value) - taken_q_value
@@ -61,7 +63,7 @@ def general_cql_loss_ma(q_network, q_target, data, gamma, key, alpha=0.2):
     td_error = huber(error) + alpha * cql
     return td_error.mean(), (td_error, taken_q_value, next_q)
 
-def general_critic_loss_ma(q_network, q_target, data, gamma, key):
+def general_critic_loss_ma(q_network, q_target, data, gamma, key, loss_kwargs):
     """critic loss"""
     # Shape[Agent, F]
     agent_idx = jnp.arange(data["state"].shape[0])
@@ -79,7 +81,7 @@ def general_critic_loss_ma(q_network, q_target, data, gamma, key):
     td_error = huber(error)
     return td_error.mean(), (td_error, taken_q_value, next_q)
 
-def general_critic_mean_loss_ma(q_network, q_target, data, gamma, key):
+def general_critic_mean_loss_ma(q_network, q_target, data, gamma, key, loss_kwargs):
     """critic loss"""
     # Shape[Agent, F]
     agent_idx = jnp.arange(data["state"].shape[0])
@@ -279,6 +281,8 @@ def vmap_ma(loss_fn):
             None, 
             # key
             0,
+            # loss kwargs
+            None
         )
     ) 
 
@@ -322,7 +326,7 @@ def update_general_qnet(q_network, q_target, data, opt, opt_state, gamma, tau, l
     return q_network, q_target, td_error, q_value, q_target_value
 
 
-def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau, loss_fn, key):
+def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau, loss_fn, loss_kwargs, key):
     """Updates the discrete Q network. This function will vmap over the task and batch dims."""
     if loss_fn == "maxq":
         loss_fn = general_critic_loss_ma 
@@ -350,7 +354,7 @@ def update_general_qnet_ma(q_network, q_target, data, opt, opt_state, gamma, tau
     # We care as GNN is just for the input. The rewards and tasks matter which agent (position) they are in
     # Easiest solution is to just sample reward/embedding pairs
     batch_loss_fn = vmap_ma(loss_fn)
-    outputs, grad = ma_mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys)
+    outputs, grad = ma_mean_reduce(batch_loss_fn, q_network, q_target, data, gamma, keys, loss_kwargs)
     _, (td_error, q_value, q_target_value) = outputs
     updates, opt_state = opt.update(
         grad, opt_state, params=eqx.filter(q_network, eqx.is_inexact_array)

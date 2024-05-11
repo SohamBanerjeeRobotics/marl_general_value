@@ -22,21 +22,30 @@ from rewards import ma_collision_reward_and_done
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("-w", "--wandb", action="store_true")
+parser.add_argument('-n', '--name', default=None)
+parser.add_argument('-p', '--project', default='morlmarl')
+parser.add_argument('-l', '--loss', default='meanq')
 args = parser.parse_args()
+
+assert args.loss in ['meanq', 'maxq', 'cql', 'weighted']
 
 # opt setup
 num_agents = 3
 config = {
     "seed": args.seed,
     "lr": 0.0001,
-    "loss": "meanq",
+    "loss": args.loss,
+    "loss_kwargs": {
+        "cql_alpha": 0.01,
+        "weighted_tau": 1.0,
+    },
     "weight_decay": 0.0001,
-    "warmup_epochs": 100,
+    "warmup_epochs": 1000,
     "gamma": jnp.array([0.95]),
     "batch_size": 256,
     "num_agents": num_agents,
     "tau": jnp.array([1/2000]),
-    "epochs": 200_000,
+    "epochs": 100_000,
     "eval_interval": 1000,
     "eval_trials": 5,
     "q_config": {
@@ -46,13 +55,13 @@ config = {
         "ensemble_size": 2,
         "ensemble_reduce": "min",
     },
-    "task_size": 768,
+    "task_size":  768,
     "obs_size": 4,
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
 }
 if args.wandb:
-    wandb.init(project='morlmarl', config=config)
+    wandb.init(project=args.project, config=config, name=args.name)
 
 key = jax.random.PRNGKey(config["seed"])
 global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(2,3))
@@ -135,7 +144,7 @@ for epoch in range(1, config["epochs"]):
     )
     ma_data_batch['next_reward'] = r
     ma_data_batch['next_done'] = d
-    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
+    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], config["loss_kwargs"], key)
 
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"
     pbar.set_description(out_str)

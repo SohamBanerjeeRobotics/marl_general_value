@@ -21,7 +21,7 @@ llms = {
 #    SentenceTransformer('paraphrase-albert-small-v2'): "paraphrase-albert-small-v2",
 #    SentenceTransformer('Supabase/gte-small'): "Supabase/gte-small",
 #    SentenceTransformer('thenlper/gte-base'): "thenlper/gte-base",
-    SentenceTransformer('thenlper/gte-large'): "thenlper/gte-large",
+#    SentenceTransformer('thenlper/gte-large'): "thenlper/gte-large",
     #SentenceTransformer("mixedbread-ai/mxbai-embed-large-v1", truncate_dim=512): "mixedbread-ai/mxbai-embed-large-v1",
 }
 
