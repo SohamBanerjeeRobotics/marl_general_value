@@ -1,9 +1,10 @@
-from constants import ACTION_MAPPING, ARENA_BOUNDS_N, ARENA_BOUNDS_E, ACTION_IDX
+from constants import ACTION_MAPPING, ARENA_BOUNDS_N, ARENA_BOUNDS_E, ACTION_IDX, ROBOT_DIAMETER
 import rclpy
 from rclpy.node import Node
 
 from freyja_msgs.msg import ReferenceState, CurrentState
 
+from rewards import segment_collision
 import robomaster_control as RControl
 
 import os, sys, time
@@ -42,9 +43,6 @@ class RoboMasterBase(Node):
         self.max_time = 900;  # seconds, expt duration
         self.robot_names = ["robomaster_1", "robomaster_2", "robomaster_3"]
         self.n_robots = len(self.robot_names)
-        # self.states = {n: [] for n in self.robot_names}
-        # self.actions = {n: [] for n in self.robot_names}
-        # self.action_vels = {n: [] for n in self.robot_names}
 
         self.robots = [None]*self.n_robots
         self.state_subs = [None]*self.n_robots
@@ -68,17 +66,17 @@ class RoboMasterBase(Node):
     def get_action_idx(self, state):
         raise NotImplementedError()
 
-    def safe_action(self, state, action_idx):
-        if state[0] < ARENA_BOUNDS_N[0] and action_idx in [ACTION_IDX["S"], ACTION_IDX["SW"], ACTION_IDX["SE"]]:
-            return False
-        elif state[0] > ARENA_BOUNDS_N[1] and action_idx in [ACTION_IDX["N"], ACTION_IDX["NW"], ACTION_IDX["NE"]]:
-            return False
-        elif state[1] < ARENA_BOUNDS_E[0] and action_idx in [ACTION_IDX["W"], ACTION_IDX["NW"], ACTION_IDX["SW"]]:
-            return False
-        elif state[1] > ARENA_BOUNDS_E[1] and action_idx in [ACTION_IDX["E"], ACTION_IDX["NE"], ACTION_IDX["SE"]]:
-            return False
-        else:
-            return True
+    def get_safe_action(self, state, action_idx):
+        pos = state[:, :2]
+        action_vel = np.stack([ACTION_MAPPING[idx.item()] for idx in action_idx], axis=0)
+        next_pos = state[:, 2] + action_vel * self.timer_dt
+        collision = segment_collision(pos, next_pos, ROBOT_DIAMETER)
+        # if collision, return null action
+        action_idx[collision.astype(bool)] = ACTION_IDX["0"]
+        if np.any(collision):
+            print("Collision detected for agents: ", np.where(collision)[0])
+        return action_idx
+
 
     def commander_timer_cb(self):
         for r in range(len(self.robots)):
@@ -97,6 +95,7 @@ class RoboMasterBase(Node):
         self.states.append(states)
 
         action_idx = self.get_action_idx(states)
+        action_idx = self.get_safe_action(states, action_idx)
         action_vel = np.stack([ACTION_MAPPING[idx.item()] for idx in action_idx], axis=0)
         self.actions.append(action_idx)
         self.action_vels.append(action_vel)
@@ -136,9 +135,6 @@ class RoboMasterCollect(RoboMasterBase):
         action = random.randint(0, len(ACTION_MAPPING) - 1)
         self.action = action
 
-        if not self.safe_action(state, action):
-            return self.get_action_idx(state)
-        
         return action
 
     def teardown(self):
