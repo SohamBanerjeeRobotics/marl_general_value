@@ -4,7 +4,10 @@ import numpy as np
 import jax
 import jax.numpy as jnp
 
-from constants import STATE_IDX
+from constants import ARENA_BOUNDS_E, ARENA_BOUNDS_N, STATE_IDX, ROBOT_DIAMETER, VELOCITY
+
+POSITION_SCALE = np.linalg.norm(np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,0] - np.array([ARENA_BOUNDS_N, ARENA_BOUNDS_E])[:,1])
+VELOCITY_SCALE = 2 * VELOCITY
 
 # TODO: Rewards should all be R(s, a, s') where s is global state
 def pairwise_distances(A):
@@ -38,79 +41,137 @@ from numpy.linalg import norm
 import numpy as np
 from numpy.linalg import norm
 
-def segment_distance(starts1, ends1, starts2, ends2):
-    # Calculate direction vectors for each segment
-    dirs1 = ends1 - starts1
-    dirs2 = ends2 - starts2
-    
-    # Prepare for broadcasting
-    p = starts1[:, jnp.newaxis, :]
-    q = starts2[jnp.newaxis, :, :]
-    r = dirs1[:, jnp.newaxis, :]
-    s = dirs2[jnp.newaxis, :, :]
-    
-    # Cross product of direction vectors in 2D
-    r_cross_s = jnp.cross(r, s, axis=2)
-    
-    # Compute the vector between the starts of the line segments
-    pq = q - p
-    
-    # Avoid divide by zero by replacing zeros with the smallest positive float
-    safe_denominator = jnp.where(r_cross_s == 0, jnp.finfo(float).eps, r_cross_s)
-    
-    # Distance calculation based on the cross product in 2D
-    distance = jnp.abs(jnp.cross(pq, r, axis=2) / safe_denominator)
 
-    # Clip the distances calculated to the length of each segment
-    projected_length1 = jnp.sum(pq * r, axis=2) / jnp.sum(r * r, axis=2)
-    projected_length2 = jnp.sum(pq * s, axis=2) / jnp.sum(s * s, axis=2)
-    projected_length1_clipped = jnp.clip(projected_length1, 0, 1)
-    projected_length2_clipped = jnp.clip(projected_length2, 0, 1)
+def segment_intersect(p1, p2, p3, p4):
+    x1,y1 = p1
+    x2,y2 = p2
+    x3,y3 = p3
+    x4,y4 = p4
+    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
+    denom = jnp.sign(denom) * jnp.maximum(jnp.abs(denom), 1e-6)
+    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
+    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
 
-    closest_p = p + projected_length1_clipped[..., jnp.newaxis] * r
-    closest_q = q + projected_length2_clipped[..., jnp.newaxis] * s
+    return jax.lax.cond(
+        (denom == 0) | (ua < 0) | (ua > 1) | (ub < 0) | (ub > 1),
+        lambda: jnp.array(jnp.inf),
+        lambda: jnp.array(0.0),
+    )
 
-    final_distances = jnp.linalg.norm(closest_p - closest_q, axis=2)
-    
-    return final_distances
+def point_distance_to_segment(a, b, c):
+    # line segment ab and point is c
+    ab = b - a
+    bc = c - b
+    ac = c - a
+
+    ab_bc = jnp.dot(ab, bc)
+    ab_ac = jnp.dot(ab, ac)
+
+    ab_bc_dist = jnp.linalg.norm(c - b)
+    ab_ac_dist = jnp.linalg.norm(c - a)
+
+    mod = jnp.clip(jnp.linalg.norm(ab), 1e-6)
+    perp_dist = jnp.abs(ab[0] * ac[1] - ab[1] * ac[0]) / mod
+
+    dist = jax.lax.cond(
+        (ab_bc > 0) | (ab_ac < 0),
+        lambda: jax.lax.cond(
+            ab_bc > 0,
+            lambda: ab_bc_dist,
+            lambda: ab_ac_dist
+        ),
+        lambda: perp_dist
+    )
+    return dist
 
 
+def segment_distance(start1, end1, start2, end2):
+    # Check if line segments intersection, then distance is 0
+    # Otherwise, the closest point must be one of the line endpoints
+    intersect_dist = segment_intersect(start1, end1, start2, end2)
+    d0 = point_distance_to_segment(start1, end1, start2)
+    d1 = point_distance_to_segment(start1, end1, end2)
+    d2 = point_distance_to_segment(start2, end2, start1)
+    d3 = point_distance_to_segment(start2, end2, end1)
+    dist = jnp.min(jnp.stack([intersect_dist, d0, d1, d2, d3]))
+    return dist
 
-def segment_collision(state, next_state, safe_radius):
-    segment_a_start = state[:, :2]
-    segment_a_end = next_state[:, :2]
-    segment_b_start = state[:, :2]
-    segment_b_end = next_state[:, :2]
-    res = segment_distance(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
-    collisions = (res < safe_radius).sum(-1)
+def test_segment_distance():
+    # Intersection, distance should be 0
+    start0 = jnp.array([0, 0])
+    end0 = jnp.array([2, 0])
+
+    start1 = jnp.array([1, 1])
+    end1 = jnp.array([1, -1])
+
+    # Distance should be exactly 1
+    start2 = jnp.array([2, 1])
+    end2 = jnp.array([3, 3])
+
+    # Distance should be exactly 1
+    start3 = jnp.array([-1, 1])
+    end3 = jnp.array([-1, -1])
+
+    # Overlap, distance should be 0
+    start4 = jnp.array([0, 0])
+    end4 = jnp.array([2, 0])
+
+    # Reverse overlap, distance should be 0
+    start5 = jnp.array([2, 0])
+    end5 = jnp.array([0, 0])
+
+    d0 = segment_distance(start0, end0, start1, end1)
+    d1 = segment_distance(start0, end0, start2, end2)
+    d2 = segment_distance(start0, end0, start3, end3)
+    d3 = segment_distance(start0, end0, start4, end4)
+    d4 = segment_distance(start0, end0, start5, end5)
+    breakpoint()
+    assert d0 == 0
+    assert d1 == 1
+    assert d2 == 1
+
+def test_segment_collision():
+    start0 = jnp.array([0, 0])
+    end0 = jnp.array([2, 0])
+
+    # Intersection, distance should be 0
+    start1 = jnp.array([1, 1])
+    end1 = jnp.array([1, -1])
+
+    # Distance should be exactly 1
+    start2 = jnp.array([2, 1])
+    end2 = jnp.array([3, 3])
+
+    # Distance should be exactly 1
+    start3 = jnp.array([-1, 1])
+    end3 = jnp.array([-1, -1])
+
+    state = jnp.stack([start0, start1, start2, start3])
+    next_state = jnp.stack([end0, end1, end2, end3])
+    # Extra zero (collision) for self-distance
+    res = segment_collision(state, next_state, 1.0)
+
+def segment_collision(state, next_state, radius):
+    # Shape [A, 2]
+    A = state.shape[0]
+    segment_a_start = jnp.repeat(state[:, None, :2], A, axis=1)
+    segment_a_end = jnp.repeat(next_state[:, None, :2], A, axis=1)
+    segment_b_start = segment_a_start.transpose(1, 0, 2)
+    segment_b_end = segment_a_end.transpose(1, 0, 2)
+    # Identity will always be zero
+    res = jax.vmap(jax.vmap(segment_distance))(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
+    # Subtract 1 because there will always be a self collision
+    collisions = (res < radius).sum(-1) - 1.0
     return collisions
     
      
-
-def ma_collision_done(dataset, safe_radius=jnp.array(0.3)):
-    return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(bool)
-
-# TODO: We need to randomly sample for MA
-# but these rewards must be computed AFTER sampling
-def ma_collision_reward(dataset, safe_radius=0.3):
-    # Dataset shape: [agent, *]
-    # Reward shape: [agent, *]
-    #B, T, A, F = dataset['state'].shape
-    #state_in = dataset['state'].reshape(B, A, F)
-    return jnp.sum(fast_pairwise_distances(dataset['state'][:, STATE_IDX["pos"]]) < safe_radius, axis=0).astype(jnp.float32) / dataset['state'].shape[0]
-
-def ma_collision_reward_and_done(state, next_state, reward, done, safe_radius=jnp.array(0.3)):
-    overlap = jnp.expand_dims(jnp.sum(fast_pairwise_distances(state[:, STATE_IDX["pos"]]) < safe_radius, axis=0), 1)
-    collisions = jnp.expand_dims(segment_collision(state, next_state, safe_radius), 1)
+def ma_collision_reward_and_done(state, next_state, reward, done):
+    collisions = jnp.expand_dims(segment_collision(state, next_state, ROBOT_DIAMETER), 1)
     # TODO: We need to draw lines and see if the lines intersect
     # the policy is abusing the 1s timesteps
     return (
-        reward 
-        - 0.5 * collisions.astype(jnp.float32) # Prevent collisions
-        - 0.5 * overlap.astype(jnp.float32), # Prevent overlapping
-        done 
-        #| collisions.astype(bool)
-        #| overlap.astype(bool) 
+        reward - collisions.astype(jnp.float32),
+        done | collisions.astype(bool)
     )
 
 
@@ -165,3 +226,7 @@ def goal_vel_reward(dataset, goal_vel):
 
 def goal_vel_done(dataset, goal_vel, threshold=0.1):
     return goal_vel_reward(dataset, goal_vel) < threshold
+
+if __name__ == '__main__':
+    test_segment_distance()
+    #test_segment_collision()

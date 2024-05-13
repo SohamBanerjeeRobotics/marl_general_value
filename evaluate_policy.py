@@ -1,5 +1,5 @@
 import copy
-from constants import ACTION_IDX
+from constants import ACTION_IDX, ROBOT_DIAMETER
 from dynamics_model import StateTransitionModel
 import equinox as eqx
 import jax.numpy as jnp
@@ -30,18 +30,19 @@ class MARLEnv:
         self.border_vis = pygame.Rect(self.padding // 2, self.padding // 2, self.scale, self.scale)
 
     def reset(self, key, eps=0.1):
-        keys = jax.random.split(key, 3)
-        vel = jax.random.choice(keys[0], self.initial_velocities, shape=(self.num_agents, 2)) 
-        vel = vel * jax.random.uniform(keys[1], shape=(self.num_agents, 2), minval=0.0, maxval=1.0)
-        pos = jax.random.uniform(
-            keys[2], shape=(self.num_agents, 2,), 
-            minval=jnp.array([
-                ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_E[0] + eps
-            ]), 
-            maxval=jnp.array([
-                ARENA_BOUNDS_N[1] - eps, ARENA_BOUNDS_E[1] - eps
-            ])  
-        )
+        keys = jax.random.split(key, 6)
+        # Zero vel prevents initial collisions
+        vel = jnp.zeros((self.num_agents, 2))
+        #vel = jax.random.choice(keys[0], self.initial_velocities, shape=(self.num_agents, 2)) 
+        #vel = vel * jax.random.uniform(keys[1], shape=(self.num_agents, 2), minval=0.0, maxval=1.0)
+
+        # Ensure agents do not start overlapped
+        n_coords = jnp.arange(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps, ROBOT_DIAMETER + 0.01) 
+        e_coords = jnp.arange(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps, ROBOT_DIAMETER + 0.01) 
+
+        n_pos = jax.random.choice(keys[2], n_coords, (self.num_agents,))
+        e_pos = jax.random.choice(keys[3], n_coords, (self.num_agents,))
+        pos = jnp.stack([n_pos, e_pos], axis=-1)
         agent_state = jnp.concatenate([pos, vel], axis=-1)
         return agent_state
 
@@ -50,10 +51,10 @@ class MARLEnv:
         next_state = jnp.clip(
             next_state,
             a_min=jnp.array([
-                ARENA_BOUNDS_N[0] - 0.01, ARENA_BOUNDS_E[0] - 0.01, -1, -1 
+                ARENA_BOUNDS_N[0], ARENA_BOUNDS_E[0], -1, -1 
             ]),
             a_max=jnp.array([
-                ARENA_BOUNDS_N[1] + 0.01, ARENA_BOUNDS_E[1] + 0.01, 1, 1
+                ARENA_BOUNDS_N[1], ARENA_BOUNDS_E[1], 1, 1
             ])
         )
         return next_state
@@ -89,7 +90,7 @@ class MARLEnv:
             ]
         cross_length = 0.05 * self.scale
         x_length = 0.033 * self.scale
-        agent_radius = 0.15 * (self.scale) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
+        agent_radius = 0.5 * ROBOT_DIAMETER * (self.scale) / (ARENA_BOUNDS_N[1] - ARENA_BOUNDS_N[0])
 
         self.screen.fill("gray")
         self.rect = pygame.draw.rect(self.screen, "white", self.border_vis)
@@ -167,7 +168,7 @@ def rollout_policy(env, q_function, tasks, num_agents, key, timesteps=50, initia
 
 global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done))
 
-def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50, seed=0):
+def evaluate_ma_policy(env=None, env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50, seed=0):
     from tasks import make_language_navigation_tasks
     from modules import GeneralMAQNetwork
 
@@ -210,7 +211,8 @@ def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=No
     if model_path is not None:
         q_function = eqx.tree_deserialise_leaves(model_path, q_function)
 
-    e = MARLEnv(**env_kwargs, num_agents=config["num_agents"])
+    if env is None:
+        env = MARLEnv(**env_kwargs, num_agents=config["num_agents"])
     agent_task_idx = jax.random.choice(key, tasks['task_embedding'].shape[0], (config['num_agents'],), replace=False)
     agent_tasks = {
         "task_embedding": tasks['task_embedding'][agent_task_idx],
@@ -219,15 +221,18 @@ def evaluate_ma_policy(env_kwargs={}, tasks=None, model_path=None, q_function=No
         "reward_kwargs": {"goal": tasks["reward_kwargs"]["goal"][agent_task_idx]}
     } 
 
-    data = rollout_policy(e, q_function, agent_tasks, config['num_agents'], key, timesteps)
+    data = eqx.filter_jit(rollout_policy)(env, q_function, agent_tasks, config['num_agents'], key, timesteps)
     bgoals = jnp.repeat(jnp.expand_dims(agent_tasks['reward_kwargs']['goal'], 0), timesteps, axis=0)
     rewards = jax.vmap(jax.vmap(point_navigation_reward))(data, goal=bgoals)
-    rewards, _ = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards, dtype=bool))
+    rewards, dones = global_fn(data["state"], data["next_state"], rewards, jnp.zeros_like(rewards, dtype=bool))
+    # Only consider the rewards of the task each agent is assigned to
+    rewards = rewards[...,jnp.arange(env.num_agents)]
+    dones = dones[...,jnp.arange(env.num_agents)]
     #global_rewards, _ = globa_fn(data["state"], data[
     # TODO: Collision rewards
     # Now visualize
-    frames = e.render_seq(data['state'], bgoals)
-    return data, bgoals, frames, rewards
+    frames = env.render_seq(data['state'], bgoals)
+    return data, bgoals, frames, rewards, dones
 
 def evaluate_policy(env_kwargs={}, tasks=None, model_path=None, q_function=None, config=None, eval_split=True, timesteps=50):
     from tasks import make_language_navigation_tasks

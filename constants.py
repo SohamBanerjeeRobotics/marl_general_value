@@ -40,10 +40,11 @@ ACTION_VEL = {
     "N": jnp.array([1, 0]),
     "NW": jnp.array([1, -1]),
 }
-ACTION_VEL = {k: 0.3 * (v / jnp.linalg.norm(v)) for k, v in ACTION_VEL.items()}
+VELOCITY = 0.3
+ACTION_VEL = {k: VELOCITY * (v / jnp.linalg.norm(v)) for k, v in ACTION_VEL.items()}
 ACTION_VEL["0"] = jnp.array([0.0, 0.0])
 ACTION_MAPPING = {ACTION_IDX[s].item(): ACTION_VEL[s] for s in ACTION_IDX}
 
-ARENA_BOUNDS_N = (-1.9, 1.9)
-ARENA_BOUNDS_E = (-1.9, 1.9)
-ROBOT_DIAMETER = 0.4 # in meters
+ARENA_BOUNDS_N = (-1.9, 1.9) # meters
+ARENA_BOUNDS_E = (-1.9, 1.9) # meters
+ROBOT_DIAMETER = 0.4 # meters

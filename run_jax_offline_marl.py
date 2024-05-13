@@ -1,6 +1,6 @@
 import argparse
 from dynamics_model import StateTransitionModel
-from evaluate_policy import evaluate_ma_policy
+from evaluate_policy import evaluate_ma_policy, MARLEnv
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -13,7 +13,7 @@ import wandb
 from modules import GeneralMAQNetwork, GeneralQNetwork, greedy_policy
 from losses import update_general_qnet, update_general_qnet_ma
 from tasks import add_rewards_to_dataset, make_language_navigation_tasks
-from rewards import ma_collision_reward, ma_collision_done, ma_collision_reward_and_done
+from rewards import ma_collision_reward_and_done
 
 
 # TODO: We are reaching deadlocks because we cannot rely on the other agent making a speicifc move. This is a downside of the dataset
@@ -22,37 +22,46 @@ from rewards import ma_collision_reward, ma_collision_done, ma_collision_reward_
 parser = argparse.ArgumentParser()
 parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("-w", "--wandb", action="store_true")
+parser.add_argument('-n', '--name', default=None)
+parser.add_argument('-p', '--project', default='morlmarl')
+parser.add_argument('-l', '--loss', default='meanq')
 args = parser.parse_args()
+
+assert args.loss in ['meanq', 'maxq', 'cql', 'weighted']
 
 # opt setup
 num_agents = 3
 config = {
     "seed": args.seed,
     "lr": 0.0001,
-    "loss": "weighted",
+    "loss": args.loss,
+    "loss_kwargs": {
+        "cql_alpha": 0.01,
+        "weighted_tau": 1.0,
+    },
     "weight_decay": 0.0001,
-    "warmup_epochs": 100,
+    "warmup_epochs": 1000,
     "gamma": jnp.array([0.95]),
-    "batch_size": 256 // num_agents,
+    "batch_size": 256,
     "num_agents": num_agents,
     "tau": jnp.array([1/2000]),
     "epochs": 100_000,
     "eval_interval": 1000,
-    "eval_trials": 3,
+    "eval_trials": 5,
     "q_config": {
-        "mlp_size": 512,
-        "head_size": 512,
+        "mlp_size": 1024,
+        "head_size": 1024,
         "dropout": 0.0,
         "ensemble_size": 2,
         "ensemble_reduce": "min",
     },
-    "task_size": 768,
+    "task_size":  768,
     "obs_size": 4,
     "act_size": 9,
     "simulator_weights": "data/dynamics_model_weights.eqx",
 }
 if args.wandb:
-    wandb.init(project='morlmarl', config=config)
+    wandb.init(project=args.project, config=config, name=args.name)
 
 key = jax.random.PRNGKey(config["seed"])
 global_fn = jax.jit(jax.vmap(ma_collision_reward_and_done), donate_argnums=(2,3))
@@ -86,13 +95,7 @@ dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_str
 data_size = dataset['next_reward'].shape[0]
 eval_tasks = make_language_navigation_tasks(True)
 
-simulator = StateTransitionModel(
-    state_size=config["obs_size"], 
-    num_actions=config["act_size"], 
-    dropout=0, 
-    key=jax.random.PRNGKey(0)
-)
-simulator = eqx.tree_deserialise_leaves(config["simulator_weights"], simulator)
+simulator = MARLEnv(num_agents=config["num_agents"])
 
 # B, num_goals, S
 #test_data = {k: v[:1] for k, v in dataset.items()}
@@ -112,16 +115,12 @@ best_eval_return = -np.inf
 best_eval_distance = np.inf
 eval_return = -np.inf
 for epoch in range(1, config["epochs"]):
-    key, task_key = jax.random.split(key)
-#    start_idx = i * config["batch_size"]
-#    end_idx = min((i + 1) * config["batch_size"], data_size)
-#    batch_size = end_idx - start_idx
+    key, batch_key, task_key = jax.random.split(key, 3)
     # 4000 C 5 is ~10^15 datapoints which is too much to materialize
     # Instead, let us just sample
     # But issue: HDF5 does not support random access, only sequential
     # Solution, first sample a slice, then build MA batch
-    #batch_idx = jnp.repeat(jnp.arange(start_idx, end_idx), config["num_agents"])
-    batch_idx = jax.random.randint(task_key, (config["batch_size"] * config["num_agents"],), 0, data_size)
+    batch_idx = jax.random.randint(batch_key, (config["batch_size"] * config["num_agents"],), 0, data_size)
 
     # Sample without replacement, but only along the agent axis
     # This way, each agent has a unique task, but the task can appear multiple times across a batch
@@ -145,7 +144,7 @@ for epoch in range(1, config["epochs"]):
     )
     ma_data_batch['next_reward'] = r
     ma_data_batch['next_done'] = d
-    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], key)
+    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], config["loss_kwargs"], key)
 
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"
     pbar.set_description(out_str)
@@ -155,19 +154,23 @@ for epoch in range(1, config["epochs"]):
             "train/loss": td_error.mean(),
             "train/epoch": epoch,
             "train/q_value_mean": qvalue.mean(),
-            "train/q_target_value_mean": qtarget_value.mean()
+            "train/q_target_value_mean": qtarget_value.mean(),
+            "train/done_density": ma_data_batch['next_done'].mean(),
+            "train/reward": ma_data_batch['next_reward'].mean(),
         })
 
     if epoch % config["eval_interval"] == 0:
         # Eval
         eval_q_function = eqx.nn.inference_mode(q_function)
-        mean_eval_distance = eval_return = 0
+        mean_eval_distance = eval_return = eval_collisions = 0
         all_frames = []
         for i in range(config["eval_trials"]):
-            data, goals, frames, rewards = evaluate_ma_policy(tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
+            data, goals, frames, rewards, dones = evaluate_ma_policy(env=simulator, tasks=eval_tasks, config=config, q_function=eval_q_function, seed=i)
             mean_eval_distance += jnp.linalg.norm(data['next_state'][...,:2] - goals, axis=-1).mean()
             eval_return += rewards.sum(0).mean()
+            eval_collisions += dones.sum() / 2
             all_frames.append(frames)
+
 
         mean_eval_distance /= config["eval_trials"]
         eval_return /= config["eval_trials"]
@@ -178,7 +181,7 @@ for epoch in range(1, config["epochs"]):
         if mean_eval_distance < best_eval_distance:
             best_eval_distance = mean_eval_distance
 
-        eqx.tree_serialise_leaves(f"models/ne-{config['seed']}-{epoch}-{eval_return:0.2f}.eqx", q_function)
+        eqx.tree_serialise_leaves(f"models/ne-nagents-{config['num_agents']}-seed-{config['seed']}-epoch-{epoch}-return-{eval_return:0.2f}.eqx", q_function)
         video = jnp.transpose(all_frames, (0, 3, 1, 2))
         if args.wandb:
             video = wandb.Video(np.array(video), fps=10)
@@ -188,6 +191,7 @@ for epoch in range(1, config["epochs"]):
                 "eval/video": video,
                 "eval/best_return": best_eval_return,
                 "eval/best_distance": best_eval_distance,
+                "eval/collisions": eval_collisions,
                 "train/epoch": epoch,
             }, step=epoch)
         

@@ -10,18 +10,21 @@ import h5py
 random.seed(0)
 
 #prompt = "You are a holonomic wheeled robot in a multirobot system,"
-prompt = "Agent 0,"
+prompt = "Agent,"
 #llm = AnglE.from_pretrained('WhereIsAI/UAE-Large-V1', pooling_strategy='cls').to("cpu")
 #llm = SentenceTransformer('paraphrase-MiniLM-L6-v2')
 #llm = SentenceTransformer('Alibaba-NLP/gte-large-en-v1.5', trust_remote_code=True)
-llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+#llm = SentenceTransformer('sentence-transformers/all-mpnet-base-v2')
+#llm = SentenceTransformer('sentence-transformers/LaBSE')
+#llm = SentenceTransformer('Supabase/gte-small')
+llm = SentenceTransformer('thenlper/gte-base')
 
 
 def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.3
+    eps = 0.5
     for i in range(num_tasks):
         x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
         y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
@@ -45,7 +48,7 @@ def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
     }
 
 
-def make_language_navigation_tasks(eval=False):
+def make_language_navigation_tasks(eval=False, llm=llm):
     task_strings = []
     task_embeddings = []
     goals = []
@@ -149,17 +152,15 @@ def make_language_navigation_tasks(eval=False):
         # Output shape: [B, G]
         # TODO: Add boundary reward
         return (
-            relative_goal_pos_reward(dataset, goal) 
-            + speed_reward(dataset) * relative_goal_pos_reward(dataset, goal)
-            #- 0.01 * goal_vel_reward(dataset, np.zeros_like(goal)) 
-            #+ goal_pos_done(dataset, goal, 0.1)
-            - 2 * boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+            relative_goal_pos_reward(dataset, goal) / POSITION_SCALE
+            + speed_reward(dataset) * relative_goal_pos_reward(dataset, goal) / (POSITION_SCALE * VELOCITY_SCALE)
+            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
         )
 
     def done_fn(dataset, goal):
         return (
             jnp.repeat(boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1), goal.shape[1], axis=-1)
-            | goal_pos_done(dataset, goal, 0.1)
+            # | goal_pos_done(dataset, goal, 0.1)
             #     #& goal_vel_done(dataset, np.zeros_like(goal), 0.1)
             # )
         )
