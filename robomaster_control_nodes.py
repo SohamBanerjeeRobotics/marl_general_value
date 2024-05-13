@@ -40,7 +40,7 @@ class RoboMasterBase(Node):
 
     def setup(self):
         self.max_time = 900;  # seconds, expt duration
-        self.robot_names = ["robomaster_1", "robomaster_2"]
+        self.robot_names = ["robomaster_1", "robomaster_2", "robomaster_3"]
         self.n_robots = len(self.robot_names)
         # self.states = {n: [] for n in self.robot_names}
         # self.actions = {n: [] for n in self.robot_names}

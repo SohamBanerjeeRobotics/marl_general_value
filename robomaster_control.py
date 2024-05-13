@@ -65,11 +65,11 @@ num_agents = 3
 ma_config = {
     "seed": 0,
     "lr": 0.0001,
-    "loss": "weighted",
+    "loss": "maxq",
     "weight_decay": 0.0001,
     "warmup_epochs": 100,
     "gamma": jnp.array([0.95]),
-    "batch_size": 256 // num_agents,
+    "batch_size": 256,
     "num_agents": num_agents,
     "tau": jnp.array([1/2000]),
     "epochs": 100_000,
@@ -96,7 +96,7 @@ ma_q_function = GeneralMAQNetwork(
     config=ma_config["q_config"], 
     key=jax.random.PRNGKey(0)
 )
-ma_q_function = eqx.tree_deserialise_leaves(f"models/ne-nagents-2-seed-0-epoch-63000-return--24.08.eqx", ma_q_function)
+ma_q_function = eqx.tree_deserialise_leaves(f"models/ne-nagents-3-seed-0-epoch-77000-return--23.82.eqx", ma_q_function)
 
 def ma_policy_wrapper(ma_q_function, state, task_embedding):
     q_value = ma_q_function(state, task_embedding, jax.random.PRNGKey(0))
