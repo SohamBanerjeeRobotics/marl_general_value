@@ -52,6 +52,14 @@ def segment_intersect(p1, p2, p3, p4):
     ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
     ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
 
+
+
+    def ccw(ax, ay, bx, by, cx, cy):
+        return (cy-ay)*(B.x-A.x) > (B.y-A.y)*(C.x-A.x)
+
+    
+    breakpoint()
+
     return jax.lax.cond(
         (denom == 0) | (ua < 0) | (ua > 1) | (ub < 0) | (ub > 1),
         lambda: jnp.array(jnp.inf),
@@ -94,7 +102,23 @@ def segment_distance(start1, end1, start2, end2):
     d2 = point_distance_to_segment(start2, end2, start1)
     d3 = point_distance_to_segment(start2, end2, end1)
     dist = jnp.min(jnp.stack([intersect_dist, d0, d1, d2, d3]))
+    breakpoint()
     return dist
+
+
+def segment_distance_dumb(start1, end1, start2, end2):
+    l0 = jnp.stack([
+        jnp.linspace(start1[0], end1[0], 50),
+        jnp.linspace(start1[1], end1[1], 50)
+    ], axis=-1)
+    l1 = jnp.stack([
+        jnp.linspace(start2[0], end2[0], 50),
+        jnp.linspace(start2[1], end2[1], 50)
+    ], axis=-1)
+
+    l0 = jnp.repeat(l0[:, None, :], l0.shape[0], axis=1)
+    l1 = jnp.repeat(l1[:, None, :], l0.shape[0], axis=1).transpose(1, 0, 2)
+    return jnp.linalg.norm(l0 - l1, axis=-1).min()
 
 def test_segment_distance():
     # Intersection, distance should be 0
@@ -120,15 +144,41 @@ def test_segment_distance():
     start5 = jnp.array([2, 0])
     end5 = jnp.array([0, 0])
 
-    d0 = segment_distance(start0, end0, start1, end1)
-    d1 = segment_distance(start0, end0, start2, end2)
-    d2 = segment_distance(start0, end0, start3, end3)
-    d3 = segment_distance(start0, end0, start4, end4)
-    d4 = segment_distance(start0, end0, start5, end5)
+
+    d0 = segment_distance_dumb(start0, end0, start1, end1)
+    d1 = segment_distance_dumb(start0, end0, start2, end2)
+    d2 = segment_distance_dumb(start0, end0, start3, end3)
+    d3 = segment_distance_dumb(start0, end0, start4, end4)
+    d4 = segment_distance_dumb(start0, end0, start5, end5)
     breakpoint()
     assert d0 == 0
     assert d1 == 1
     assert d2 == 1
+
+def test_segment_collision_real():
+    starts = jnp.array([
+       [-1.10234327, -1.23581204],
+       [-0.71478854,  0.96816025],
+       [ 0.67988497,  1.20852254]
+    ])
+    ends = jnp.array([
+      [-1.10234327, -1.23581204],
+      [-0.71478854,  0.96816025],
+      [ 0.97988499,  1.20852254]
+    ])
+    
+    res = batched_segment_distance(starts, ends)
+    breakpoint()
+
+def test_segment_distance_real():
+    # Two points with no motion
+    starts = jnp.array([
+       [-1.10234327, -1.23581204],
+       [-0.71478854,  0.96816025],
+    ])
+    
+    res = segment_distance_dumb(starts[0], starts[0], starts[1], starts[1])
+    breakpoint()
 
 def test_segment_collision():
     start0 = jnp.array([0, 0])
@@ -150,8 +200,9 @@ def test_segment_collision():
     next_state = jnp.stack([end0, end1, end2, end3])
     # Extra zero (collision) for self-distance
     res = segment_collision(state, next_state, 1.0)
+    breakpoint()
 
-def segment_collision(state, next_state, radius):
+def batched_segment_distance(state, next_state):
     # Shape [A, 2]
     A = state.shape[0]
     segment_a_start = jnp.repeat(state[:, None, :2], A, axis=1)
@@ -159,9 +210,14 @@ def segment_collision(state, next_state, radius):
     segment_b_start = segment_a_start.transpose(1, 0, 2)
     segment_b_end = segment_a_end.transpose(1, 0, 2)
     # Identity will always be zero
-    res = jax.vmap(jax.vmap(segment_distance))(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
+    res = jax.vmap(jax.vmap(segment_distance_dumb))(segment_a_start, segment_a_end, segment_b_start, segment_b_end)
+    return res
+
+def segment_collision(state, next_state, radius):
+    # Shape [A, 2]
+    dists = batched_segment_distance(state, next_state)
     # Subtract 1 because there will always be a self collision
-    collisions = (res < radius).sum(-1) - 1.0
+    collisions = (dists < radius).sum(-1) - 1.0
     return collisions
     
      
@@ -230,3 +286,5 @@ def goal_vel_done(dataset, goal_vel, threshold=0.1):
 if __name__ == '__main__':
     test_segment_distance()
     #test_segment_collision()
+    #test_segment_collision_real()
+    #test_segment_distance_real()
