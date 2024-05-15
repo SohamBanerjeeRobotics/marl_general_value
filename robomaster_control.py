@@ -76,8 +76,8 @@ ma_config = {
     "eval_interval": 1000,
     "eval_trials": 3,
     "q_config": {
-        "mlp_size": 512,
-        "head_size": 512,
+        "mlp_size": 1024,
+        "head_size": 1024,
         "dropout": 0.0,
         "ensemble_size": 2,
         "ensemble_reduce": "min",
@@ -96,7 +96,7 @@ ma_q_function = GeneralMAQNetwork(
     config=ma_config["q_config"], 
     key=jax.random.PRNGKey(0)
 )
-ma_q_function = eqx.tree_deserialise_leaves(f"models/ne-nagents-3-seed-0-epoch-77000-return--23.82.eqx", ma_q_function)
+ma_q_function = eqx.tree_deserialise_leaves(f"models/ne-nagents-3-seed-0-epoch-99000-return-0.79.eqx", ma_q_function)
 
 def ma_policy_wrapper(ma_q_function, state, task_embedding):
     q_value = ma_q_function(state, task_embedding, jax.random.PRNGKey(0))
