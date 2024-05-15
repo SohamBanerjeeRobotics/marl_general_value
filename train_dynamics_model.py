@@ -53,10 +53,9 @@ datasets = [
   "data/robomaster_collect_1714734360.csv",
   "data/robomaster_collect_1714735377.csv",
   "data/robomaster_collect_1714736377.csv",
-  "data/robomaster_collect_1714737295.csv"
-  # "data/rand-1hz-sticky-1/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  # "data/rand-1hz-sticky-2/robomaster_1/rl_statesactions_tuple/rl_tuples.csv",
-  # "data/rand-1hz-sticky-3/robomaster_1/rl_statesactions_tuple/rl_tuples.csv"
+  "data/robomaster_collect_1714737295.csv",
+  "data/robomaster_collect_1715178400.csv",
+  "data/robomaster_collect_1715179339.csv",
 ]
 data, data_size = dataset_from_csv(datasets)
 train, test, val = split_dataset(data, data_size, key=data_key)

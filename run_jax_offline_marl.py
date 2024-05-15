@@ -9,6 +9,7 @@ import optax
 import h5py
 import tqdm
 import wandb
+import yaml
 
 from modules import GeneralMAQNetwork, GeneralQNetwork, greedy_policy
 from losses import update_general_qnet, update_general_qnet_ma
@@ -24,42 +25,14 @@ parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("-w", "--wandb", action="store_true")
 parser.add_argument('-n', '--name', default=None)
 parser.add_argument('-p', '--project', default='morlmarl')
-parser.add_argument('-l', '--loss', default='meanq')
+parser.add_argument('config')
 args = parser.parse_args()
 
-assert args.loss in ['meanq', 'maxq', 'cql', 'weighted']
+with open(args.config) as f:
+    config = yaml.safe_load(f)
 
-# opt setup
-num_agents = 3
-config = {
-    "seed": args.seed,
-    "lr": 0.0001,
-    "loss": args.loss,
-    "loss_kwargs": {
-        "cql_alpha": 0.01,
-        "weighted_tau": 1.0,
-    },
-    "weight_decay": 0.0001,
-    "warmup_epochs": 1000,
-    "gamma": jnp.array([0.95]),
-    "batch_size": 256,
-    "num_agents": num_agents,
-    "tau": jnp.array([1/2000]),
-    "epochs": 100_000,
-    "eval_interval": 1000,
-    "eval_trials": 5,
-    "q_config": {
-        "mlp_size": 1024,
-        "head_size": 1024,
-        "dropout": 0.0,
-        "ensemble_size": 2,
-        "ensemble_reduce": "min",
-    },
-    "task_size":  768,
-    "obs_size": 4,
-    "act_size": 9,
-    "simulator_weights": "data/dynamics_model_weights.eqx",
-}
+config['seed'] = args.seed
+
 if args.wandb:
     wandb.init(project=args.project, config=config, name=args.name)
 
@@ -97,23 +70,15 @@ eval_tasks = make_language_navigation_tasks(True)
 
 simulator = MARLEnv(num_agents=config["num_agents"])
 
-# B, num_goals, S
-#test_data = {k: v[:1] for k, v in dataset.items()}
-#update_general_qnet(q_function, q_target, test_data, opt, opt_state, config["gamma"], config["tau"], key)
-
-
-# TODO: Utilize negative reward for leaving boundaries
-# Apply/create dones
-# Predict dones?
+num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
+pbar = tqdm.tqdm(total=config["epochs"])
 
 # metrics
 td_error = jnp.array([jnp.inf])
-
-num_batches = (data_size + config["batch_size"] - 1) // config["batch_size"]
-pbar = tqdm.tqdm(total=config["epochs"])
 best_eval_return = -np.inf
 best_eval_distance = np.inf
 eval_return = -np.inf
+
 for epoch in range(1, config["epochs"]):
     key, batch_key, task_key = jax.random.split(key, 3)
     # 4000 C 5 is ~10^15 datapoints which is too much to materialize
@@ -144,7 +109,7 @@ for epoch in range(1, config["epochs"]):
     )
     ma_data_batch['next_reward'] = r
     ma_data_batch['next_done'] = d
-    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, config["gamma"], config["tau"], config["loss"], config["loss_kwargs"], key)
+    q_function, q_target, td_error, qvalue, qtarget_value = eqx.filter_jit(update_general_qnet_ma)(q_function, q_target, ma_data_batch, opt, opt_state, jnp.array([config["gamma"]]), jnp.array([config["tau"]]), config["loss"], config["loss_kwargs"], key)
 
     out_str = f"Epoch {epoch}/{config['epochs']} ql: {td_error.mean():0.3f} qv: {qvalue.mean():0.3f} ret: {eval_return:.2f} best: {best_eval_return:.2f}"
     pbar.set_description(out_str)
