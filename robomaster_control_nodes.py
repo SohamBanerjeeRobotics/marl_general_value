@@ -69,12 +69,15 @@ class RoboMasterBase(Node):
     def get_safe_action(self, state, action_idx):
         pos = state[:, :2]
         action_vel = np.stack([ACTION_MAPPING[idx.item()] for idx in action_idx], axis=0)
-        next_pos = state[:, 2] + action_vel * self.timer_dt
-        collision = segment_collision(pos, next_pos, ROBOT_DIAMETER)
+        next_pos = state[:, :2] + action_vel * self.timer_dt
         # if collision, return null action
+        collision = segment_collision(pos, next_pos, ROBOT_DIAMETER)
+        # from jax array to numpy for assignment
+        action_idx = np.array(action_idx)
         action_idx[collision.astype(bool)] = ACTION_IDX["0"]
         if np.any(collision):
-            print("Collision detected for agents: ", np.where(collision)[0])
+            print("Collision detected: ", collision)
+            breakpoint()
         return action_idx
 
 
