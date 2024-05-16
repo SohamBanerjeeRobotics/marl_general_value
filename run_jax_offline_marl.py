@@ -10,6 +10,7 @@ import h5py
 import tqdm
 import wandb
 import yaml
+import os
 
 from modules import GeneralMAQNetwork, GeneralQNetwork, greedy_policy
 from losses import update_general_qnet, update_general_qnet_ma
@@ -146,7 +147,9 @@ for epoch in range(1, config["epochs"]):
         if mean_eval_distance < best_eval_distance:
             best_eval_distance = mean_eval_distance
 
-        eqx.tree_serialise_leaves(f"models/ne-nagents-{config['num_agents']}-seed-{config['seed']}-epoch-{epoch}-return-{eval_return:0.2f}.eqx", q_function)
+        dir_path = f"models/{args.project}/{config['loss']}/{config['seed']}"
+        os.makedirs(dir_path, exist_ok=True)
+        eqx.tree_serialise_leaves(f"{dir_path}/epoch-{epoch}-distance-{mean_eval_distance:0.2f}-return-{eval_return:0.2f}.eqx", q_function)
         video = jnp.transpose(all_frames, (0, 3, 1, 2))
         if args.wandb:
             video = wandb.Video(np.array(video), fps=10)
