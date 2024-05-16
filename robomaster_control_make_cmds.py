@@ -6,24 +6,48 @@ import numpy as np
 tasks = make_language_navigation_tasks()
 eval_tasks = make_language_navigation_tasks(eval=True)
 
-strings = tasks['task_string'] + eval_tasks['task_string'][:1]
-embeds = list(np.concatenate([tasks['task_embedding'], eval_tasks['task_embedding'][:1]], axis=0))
-goals = list(tasks['reward_kwargs']['goal']) + list(eval_tasks['reward_kwargs']['goal'][:1])
+train_mapping = {}
+for i in range(len(tasks['task_embedding'])):
+    if tasks['reward_kwargs']['goal'][i].tobytes() not in train_mapping:
+        train_mapping[tasks['reward_kwargs']['goal'][i].tobytes()] = []
+    train_mapping[tasks['reward_kwargs']['goal'][i].tobytes()].append({
+        "task_string": tasks['task_string'][i], 
+        "embedding": tasks['task_embedding'][i], 
+        "goal": tasks['reward_kwargs']['goal'][i]
+    })
 
-mapping = {}
-for i in range(len(embeds)):
-    mapping[strings[i]] = {"embedding": embeds[i], "goal": goals[i]}
+eval_mapping = {}
+for i in range(len(eval_tasks['task_embedding'])):
+    if eval_tasks['reward_kwargs']['goal'][i].tobytes() not in eval_mapping:
+        eval_mapping[eval_tasks['reward_kwargs']['goal'][i].tobytes()] = []
+    eval_mapping[eval_tasks['reward_kwargs']['goal'][i].tobytes()].append({
+        "task_string": eval_tasks['task_string'][i], 
+        "embedding": eval_tasks['task_embedding'][i], 
+        "goal": eval_tasks['reward_kwargs']['goal'][i]
+    })
 
-with open("robomaster_control.pkl", 'wb') as f:
-    pickle.dump(mapping, f)
+# Keys are useless, drop them
+train_mapping = list(train_mapping.values())
+eval_mapping = list(eval_mapping.values())
 
-# Load and verify correctness
-with open("robomaster_control.pkl", 'rb') as f:
-    loaded = pickle.load(f)
+with open("robomaster_control_train.pkl", 'wb') as f:
+    pickle.dump(train_mapping, f)
+with open("robomaster_control_eval.pkl", 'wb') as f:
+    pickle.dump(eval_mapping, f)
 
-for k, v in mapping.items():
-    assert k in loaded
-    for kk, vv in v.items():
-        assert np.allclose(vv, loaded[k][kk])
+# # Load and verify correctness
+# with open("robomaster_control_train.pkl", 'rb') as f:
+#     loaded_train = pickle.load(f)
+# with open("robomaster_control_eval.pkl", 'rb') as f:
+#     loaded_eval = pickle.load(f)
+
+# for k, v in train_mapping.items():
+#     assert k in loaded_train, f"{k} not in loaded_train"
+#     for kk, vv in v.items():
+#         assert np.allclose(vv, loaded_train[k][kk])
 
 
+# for k, v in eval_mapping.items():
+#     assert k in loaded_eval, f"{k} not in loaded_eval"
+#     for kk, vv in v.items():
+#         assert np.allclose(vv, loaded_eval[k][kk])

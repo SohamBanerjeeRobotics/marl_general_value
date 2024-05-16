@@ -19,8 +19,11 @@ if __name__ == '__main__':
     l_tasks = make_language_navigation_tasks()
     #data_with_rewards = add_rewards_to_dataset(data, tasks)
     all_data_with_rewards = add_rewards_to_dataset(data, l_tasks)
+    # Subsample 
+    data_amount = 1.0
+    all_data_with_rewards = {k: v if k == 'task_embedding' else v[: int(data_amount * v.shape[0])] for k, v in all_data_with_rewards.items()}
     #all_data_with_rewards = merge_reward_datasets([data_with_rewards, ldata_with_rewards])
-    with h5py.File("dataset.h5", "w") as file:
+    with h5py.File("dataset-25.h5", "w") as file:
         file.create_dataset("state", data=all_data_with_rewards["state"])
         file.create_dataset("action", data=all_data_with_rewards["action"])
         file.create_dataset("next_state", data=all_data_with_rewards["next_state"])
