@@ -119,10 +119,14 @@ def plot_loss_fn():
         "eval/mean_return": "Return",
         "eval/mean_distance": "Distance",
         "eval/best_distance": "Best Distance",
-        "eval/collisions": "Collisions",
+        "eval/collisions": "Collisions per Timestep",
         "train/epoch": "Train Epoch",
     }
     df = df.rename(columns=metric_keys)
+    # Subtract of velocity distance -- set goals to be 30cm radius
+    df['Distance'] = np.maximum(df['Distance'] - 0.3, 0)
+    # Count collisions per timestep, 5 episodes each 50s long
+    df['Collisions per Timestep'] = df['Collisions per Timestep'] / (50 * 5)
     # Otherwise hue interpolates as float
     df['Tau'] = df['Tau'].astype(str)
     df['Alpha'] = df['Alpha'].astype(str)
@@ -131,46 +135,47 @@ def plot_loss_fn():
     plt.figure()
     ax = sns.lineplot(weighted, x='Train Epoch', y='Distance', hue='Tau')
     ax.set_title('Soft Q Distance to Target')
-    ax.set_ylim(0.4, 2.3)
+    ax.set_ylim(-0.1, 2.0)
     plt.savefig("plots/sim_weighted_distance.pdf")
     plt.figure()
-    ax = sns.lineplot(weighted, x='Train Epoch', y='Collisions', hue='Tau')
-    ax.set_ylim(-50, 700)
-    ax.set_title('Soft Q Number of Collisions')
+    ax = sns.lineplot(weighted, x='Train Epoch', y='Collisions per Timestep', hue='Tau')
+    ax.set_ylim(-0.2, 5)
+    ax.set_title('Soft Q Number of Collisions per Timestep')
     plt.savefig("plots/sim_weighted_collision.pdf")
 
     cql = groups.get_group(('cql',))
     cql = groups.get_group(('cql',)).sort_values('Alpha')
     plt.figure()
     ax = sns.lineplot(cql, x='Train Epoch', y='Distance', hue='Alpha')
+    ax.legend(loc='lower right',ncol=2)
     ax.set_title('CQL Distance to Target')
-    ax.set_ylim(0.4, 2.3)
+    ax.set_ylim(-0.1, 2.0)
     plt.savefig("plots/sim_cql_distance.pdf")
     plt.figure()
-    ax = sns.lineplot(cql, x='Train Epoch', y='Collisions', hue='Alpha')
-    ax.set_title('CQL Number of Collisions')
-    ax.set_ylim(-50, 700)
+    ax = sns.lineplot(cql, x='Train Epoch', y='Collisions per Timestep', hue='Alpha')
+    ax.set_title('CQL Number of Collisions per Timestep')
+    ax.set_ylim(-0.2, 5)
     plt.savefig("plots/sim_cql_collision.pdf")
 
     # Now plot the best cql and weighted against mean/max
     groups = df.groupby(['Loss', 'Tau', 'Alpha'])
     best_cql = groups.get_group(('cql', '0.0', '0.4'))
-    best_weighted = groups.get_group(('weighted', '2.0', '0.0'))
-    #best_weighted = groups.get_group(('weighted', '5.0', '0.0'))
+    #best_weighted = groups.get_group(('weighted', '2.0', '0.0'))
+    best_weighted = groups.get_group(('weighted', '5.0', '0.0'))
     mean = groups.get_group(('meanq', '0.0', '0.0'))
-    #max = groups.get_group(('max', '0.0', '0.0'))
-    #best_df = pd.concat([best_cql, best_weighted, mean, max])
-    best_df = pd.concat([best_cql, best_weighted, mean]).reset_index(drop=True)
+    max = groups.get_group(('maxq', '0.0', '0.0'))
+    best_df = pd.concat([best_cql, best_weighted, mean, max]).reset_index(drop=True)
+    best_df = best_df.replace({'meanq': 'Mean Q', 'maxq': 'Max Q', 'cql': 'CQL', 'weighted': 'Soft Q'})
     plt.figure()
     ax = sns.lineplot(best_df, x='Train Epoch', y='Distance', hue='Loss')
     ax.set_title('Distance to Target')
-    ax.set_ylim(0.4, 2.3)
+    ax.set_ylim(-0.1, 2.0)
     plt.savefig("plots/sim_distance.pdf")
 
     plt.figure()
-    ax = sns.lineplot(best_df, x='Train Epoch', y='Collisions', hue='Loss')
+    ax = sns.lineplot(best_df, x='Train Epoch', y='Collisions per Timestep', hue='Loss')
     ax.set_title('Number of Collisions')
-    ax.set_ylim(-50, 700)
+    ax.set_ylim(-0.2, 5)
     plt.savefig("plots/sim_collision.pdf")
 
     plt.show()
