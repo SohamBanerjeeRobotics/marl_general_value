@@ -32,7 +32,11 @@ ma_q_function = GeneralMAQNetwork(
     config=config["q_config"], 
     key=key,
 )
-model_weights = 'models/soft-2.0-126000.eqx'
+#model_weights = 'models/soft-2_0-238000.eqx'
+#model_weights = 'models/mean-477000.eqx'
+#model_weights = 'models/max-103000.eqx'
+model_weights = 'models/cql-339000.eqx'
+
 ma_q_function = eqx.tree_deserialise_leaves(model_weights, ma_q_function)
 
 
