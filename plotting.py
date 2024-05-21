@@ -1,9 +1,5 @@
-import multiprocessing
 from multiprocessing.pool import ThreadPool
-import plotlib as pl
 import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import wandb
 import tqdm
 import pandas as pd
@@ -72,7 +68,7 @@ def plot_llm():
         lambda x: x.rolling(window=50, min_periods=1).mean()
     )
     df = df.rename(columns={"epoch": "Epoch", "run_name": "LLM"})
-    fig = plt.figure(figsize=(10, 3))
+    fig = plt.figure(figsize=(7, 3))
     g = sns.lineplot(data=df, x='Epoch', y='Validation Loss', hue='LLM', errorbar=None)
     g.set_yscale("log")
     sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1))
@@ -181,8 +177,97 @@ def plot_loss_fn():
     plt.show()
     breakpoint()
 
+def plot_data_ablate():
+    ## Compare with less data
+    csv_path = "plots/data_efficiency.csv"
+    def process_loss_run(run):
+        df = pd.DataFrame(run.scan_history())
+        # Only get 1k epoch intervals
+        df = df[df['eval/best_return'].notnull()]
+        df['run_name'] = run.name
+        df['run_id'] = run.id
+        df['Loss'] = run.config['loss']
+        df['dataset'] = run.config['dataset']
+        loss_kwargs = run.config.get('loss_kwargs')
+        if loss_kwargs is None:
+            loss_kwargs = {}
+        df['Alpha'] = loss_kwargs.get('cql_alpha', 0)
+        df['Tau'] = loss_kwargs.get('weighted_tau', 0)
+        return df
+
+    if not os.path.exists(csv_path):
+        api = wandb.Api(timeout=90)
+        project = api.runs("morlmarl-limited")
+        pool = ThreadPool(100)
+        runs = [run for run in project]
+        result = tqdm.tqdm(pool.imap_unordered(process_loss_run, runs), total=len(runs))
+        # Block until all done
+        result = list(result)
+        df = pd.concat(result)
+        df.to_csv(csv_path)
+    else:
+        df = pd.read_csv(csv_path)
+
+    metric_keys={
+        "eval/best_return": "Best Return",
+        "eval/mean_return": "Return",
+        "eval/mean_distance": "Distance",
+        "eval/best_distance": "Best Distance",
+        "eval/collisions": "Collisions per Timestep",
+        "train/epoch": "Train Epoch",
+        "dataset": "Dataset Size (Mins)"
+    }
+    df = df.rename(columns=metric_keys)
+    # Subtract of velocity distance -- set goals to be 30cm radius
+    df['Distance'] = np.maximum(df['Distance'] - 0.3, 0)
+    # Count collisions per timestep, 5 episodes each 50s long
+    df['Collisions per Timestep'] = df['Collisions per Timestep'] / (50 * 5)
+    # Total dataset length in mins
+    datasize = 90
+    df = df.sort_values('Dataset Size (Mins)')
+    df = df.replace({
+        'dataset-05.h5': str(datasize * 0.05),
+        'dataset-10.h5': str(datasize * 0.10),
+        'dataset-25.h5': str(datasize * 0.25),
+        'dataset-50.h5': str(datasize * 0.50),
+        'dataset-75.h5': str(datasize * 0.75),
+        'dataset.h5': str(datasize)
+    })
+    groups = df.groupby(['Loss'])
+    #weighted = groups.get_group(('weighted',)).sort_values('Dataset Size (Mins)').reset_index()
+    mean = groups.get_group(('meanq',))
+    plt.figure()
+    ax = sns.lineplot(mean, x='Train Epoch', y='Distance', hue='Dataset Size (Mins)')
+    ax.set_title('Distance to Target')
+    ax.set_ylim(-0.1, 2.0)
+    plt.savefig("plots/data_distance.pdf")
+    plt.show()
+
+    plt.figure()
+    ax = sns.lineplot(mean, x='Train Epoch', y='Collisions per Timestep', hue='Dataset Size (Mins)')
+    ax.set_title('Number of Collisions')
+    ax.set_ylim(-0.2, 5)
+    plt.savefig("plots/data_collision.pdf")
+    plt.show()
+
+
+def plot_real():
+    soft_train = pd.read_csv("data/real_csv/robomaster_eval_1716209490.csv")
+    dists = soft_train.groupby('robot_idx').apply(
+        # Compute the distance between the state and goal per robot
+        lambda x: np.maximum(0, np.linalg.norm(x[['state.pn', 'state.pe']].values - x[['goals.pn', 'goals.pe']].values, axis=-1) - 0.3)
+    )
+    # Now compute mean over all agents, for each timestep
+    dists = dists.mean()
+    print(dists)
+    pos = np.stack([soft_train['state.pn'], soft_train['state.pe']], axis=-1)
+    goal = np.stack([soft_train['goals.pn'], soft_train['goals.pe']], axis=-1)
+    breakpoint()
+
 
 
 if __name__ == '__main__':
     #plot_llm()
-    plot_loss_fn()
+    #plot_loss_fn()
+    #plot_data_ablate()
+    plot_real()

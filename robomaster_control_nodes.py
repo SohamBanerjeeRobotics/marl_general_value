@@ -271,8 +271,8 @@ class RoboMasterEval(RoboMasterBase):
                 "action_vel.ve": action_vels[:, idx, 1],
             })
             g = pd.DataFrame.from_dict({
-                "goals.pn": action_vels[:, idx, 0],
-                "goals.pe": action_vels[:, idx, 1],
+                "goals.pn": goals[:, idx, 0],
+                "goals.pe": goals[:, idx, 1],
             })
             df = pd.DataFrame({
                 **s,
