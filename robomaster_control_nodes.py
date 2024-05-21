@@ -46,7 +46,7 @@ class RoboMasterBase(Node):
     ros_timestamps = []
 
     def setup(self):
-        self.max_time = 60 * 10;  # seconds, expt duration
+        self.max_time = 60 * 5;  # seconds, expt duration
         self.robot_names = ["robomaster_1", "robomaster_2", "robomaster_3"]
         self.n_robots = len(self.robot_names)
 
