@@ -36,6 +36,7 @@ def make_line_tasks(eval=False, llm=llm):
     orientations = [
         "vertical line",
         "horizontal line",
+    ]
     
     if eval:
         commands = [
@@ -49,18 +50,13 @@ def make_line_tasks(eval=False, llm=llm):
     for i, ori in enumerate(orientations):
         for c in commands:
             task_strings.append(
-                c.format(ori)
+                f"{prompt} {c.format(ori)}"
             )
             if ori == "vertical line":
                 goals.append(np.array([1.0, 0.0]))
             else:
                 goals.append(np.array([0.0, 1.0]))
-
-    task_strings = scatter_commands + gather_commands
-    goals = np.concatenate([
-        np.ones((len(gather_commands),)),
-        np.zeros((len(scatter_commands),))
-    ])
+    
     reward_kwargs = {"goal": np.array(goals)}
     task_embeddings = llm.encode(task_strings)
 
@@ -91,7 +87,6 @@ def make_gather_scatter_tasks(eval=False, llm=llm):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.75
     
     scatter_commands = [
         "scatter",
@@ -121,7 +116,8 @@ def make_gather_scatter_tasks(eval=False, llm=llm):
             "muster",
         ]
 
-    task_strings = scatter_commands + gather_commands
+    task_commands = scatter_commands + gather_commands
+    task_strings = [f"{prompt} {c}" for c in task_commands]
     goals = np.concatenate([
         np.ones((len(gather_commands),)),
         np.zeros((len(scatter_commands),))
