@@ -26,6 +26,7 @@ parser.add_argument("--seed", type=int, default=0)
 parser.add_argument("-w", "--wandb", action="store_true")
 parser.add_argument('-n', '--name', default=None)
 parser.add_argument('-p', '--project', default='morlmarl')
+parser.add_argument('-d', '--dataset', default='dataset.h5')
 parser.add_argument('config')
 args = parser.parse_args()
 
@@ -33,6 +34,7 @@ with open(args.config) as f:
     config = yaml.safe_load(f)
 
 config['seed'] = args.seed
+config['dataset'] = args.dataset
 
 if args.wandb:
     wandb.init(project=args.project, config=config, name=args.name)
@@ -64,7 +66,8 @@ q_target = GeneralMAQNetwork(
 )
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
-dataset_with_str = h5py.File("dataset.h5", "r")
+#dataset_with_str = h5py.File("dataset.h5", "r")
+dataset_with_str = h5py.File(config['dataset'], "r")
 dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_string'} 
 data_size = dataset['next_reward'].shape[0]
 eval_tasks = make_language_navigation_tasks(True)
