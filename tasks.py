@@ -19,32 +19,133 @@ prompt = "Agent,"
 #llm = SentenceTransformer('Supabase/gte-small')
 llm = SentenceTransformer('thenlper/gte-base')
 
-
-def make_navigation_goals_and_embeddings(llm, num_tasks=1_000):
+def make_line_tasks(eval=False, llm=llm):
     task_strings = []
     task_embeddings = []
     goals = []
-    eps = 0.5
-    for i in range(num_tasks):
-        x = random.uniform(ARENA_BOUNDS_E[0] + eps, ARENA_BOUNDS_E[1] - eps)
-        y = random.uniform(ARENA_BOUNDS_N[0] + eps, ARENA_BOUNDS_N[1] - eps)
+    eps = 0.75
 
-        command_strings = [
-            f"navigate to ({x:0.2f}, {y:0.2f})",
+    commands = [
+        "gather in a {}",
+        "form a {}",
+        "arrange yourself in a {} formation",
+        "put yourself in a {}",
+        "join a {} formation",
+        "stand in a {}",
+    ]
+    orientations = [
+        "vertical line",
+        "horizontal line",
+    ]
+    
+    if eval:
+        commands = [
+            "join in a {}",
         ]
-        idx = random.randint(0, len(command_strings) - 1)
-        task_str = f"{prompt} {command_strings[idx]}"
-        task_strings.append(task_str)
-        #task_embeddings.append(emb)
-        goals.append((x, y))
 
+    task_strings = []
+    goals = []
+
+
+    for i, ori in enumerate(orientations):
+        for c in commands:
+            task_strings.append(
+                f"{prompt} {c.format(ori)}"
+            )
+            if ori == "vertical line":
+                goals.append(np.array([1.0, 0.0]))
+            else:
+                goals.append(np.array([0.0, 1.0]))
+    
+    reward_kwargs = {"goal": np.array(goals)}
     task_embeddings = llm.encode(task_strings)
-    assert len(task_strings) == len(task_embeddings) == num_tasks
+
+    def reward_fn(dataset, goal):
+        # Dataset shape: [B, 2]
+        # Goal shape: [G, 2]
+        # Output shape: [B, G]
+        # TODO: Add boundary reward
+        return (
+            line_reward(dataset, goal) / POSITION_SCALE
+            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+        )
+
+    def done_fn(dataset, goal):
+        return (
+            jnp.repeat(boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1), goal.shape[1], axis=-1)
+        )
+    return {
+        "task_string": task_strings,
+        "task_embedding": np.stack(task_embeddings, axis=0),
+        "reward_function": reward_fn,
+        "done_function": done_fn,
+        "reward_kwargs": reward_kwargs
+    }
+       
+
+def make_gather_scatter_tasks(eval=False, llm=llm):
+    task_strings = []
+    task_embeddings = []
+    goals = []
+    
+    scatter_commands = [
+        "scatter",
+        "dissolve",
+        "distribute",
+        "spread out",
+        "diffuse",
+        "disseminate",
+        "split up",
+        "separate",
+    ]
+    gather_commands = [
+        "gather",
+        "assemble",
+        "group",
+        "amass",
+        "cluster",
+        "collect",
+        "consolidate",
+        "congregate",
+    ]
+    if eval:
+        scatter_commands = [
+            "disperse",
+        ]
+        gather_commands = [
+            "muster",
+        ]
+
+    task_commands = scatter_commands + gather_commands
+    task_strings = [f"{prompt} {c}" for c in task_commands]
+    goals = np.concatenate([
+        np.ones((len(gather_commands),)),
+        np.zeros((len(scatter_commands),))
+    ])
+    task_embeddings = llm.encode(task_strings)
+    reward_kwargs = {"goal": np.array(goals)}
+
+    def reward_fn(dataset, goal):
+        # Dataset shape: [B, 2]
+        # Goal shape: [G, 2]
+        # Output shape: [B, G]
+        # TODO: Add boundary reward
+        return (
+            relative_radius_reward(dataset) / POSITION_SCALE
+            - boundary_reward(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1)
+        )
+
+    def done_fn(dataset, goal):
+        return (
+            jnp.repeat(boundary_done(dataset, ARENA_BOUNDS_E, ARENA_BOUNDS_N).squeeze(-1), goal.shape[1], axis=-1)
+        )
 
     return {
         "task_string": task_strings,
         "task_embedding": np.stack(task_embeddings, axis=0),
-        "goal": np.array(goals)
+        "reward_function": reward_fn,
+        "done_function": done_fn,
+        "reward_kwargs": reward_kwargs
     }
 
 

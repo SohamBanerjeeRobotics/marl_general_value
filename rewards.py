@@ -269,6 +269,13 @@ def relative_goal_pos_reward(dataset, goal_pos):
         - np.sum(np.linalg.norm(dataset["next_state"][...,STATE_IDX["pos"]] - goal_pos, ord=2, axis=-1, keepdims=True), axis=-1)
     )
 
+def relative_radius_reward(dataset, goal_radius=1.0):
+    return np.sum(np.linalg.norm(dataset["state"][...,STATE_IDX["pos"]], ord=2, axis=-1, keepdims=True) - goal_radius, axis=-1)
+
+def line_reward(dataset, goal):
+    return np.sum(np.linalg.norm(dataset['state'][...,STATE_IDX['pos']] * goal, axis=-1, keepdims=True), axis=-1)
+    
+
 def goal_pos_done(dataset, goal_pos, threshold=0.1):
     #return goal_pos_reward(dataset, goal_pos) < threshold
     return (
