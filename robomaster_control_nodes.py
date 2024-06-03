@@ -46,8 +46,9 @@ class RoboMasterBase(Node):
     ros_timestamps = []
 
     def setup(self):
-        self.max_time = 60 * 5;  # seconds, expt duration
-        self.robot_names = ["robomaster_1", "robomaster_2", "robomaster_3"]
+        self.max_time = 60 * 10;  # seconds, expt duration
+        #self.robot_names = ["robomaster_0", "robomaster_1", "robomaster_2", "robomaster_3", "robomaster_4"]
+        self.robot_names = ["robomaster_2"]
         self.n_robots = len(self.robot_names)
 
         self.robots = [None]*self.n_robots
@@ -145,7 +146,8 @@ class RoboMasterCollect(RoboMasterBase):
 
 
     def get_action_idx(self, state):
-        action = random.randint(0, len(ACTION_MAPPING) - 1)
+        #action = random.randint(0, len(ACTION_MAPPING) - 1)
+        action = np.random.randint(0, len(ACTION_MAPPING) - 1, len(self.robots))
         self.action = action
 
         return action
