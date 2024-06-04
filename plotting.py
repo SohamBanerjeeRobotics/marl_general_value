@@ -12,8 +12,8 @@ import matplotlib.pyplot as plt
 
 px.defaults.template = "seaborn"
 sns.set_theme()
+sns.set_context("talk")
 
-csv_path = "plots/llm.csv"
 
 def reduce(df, x='Train Epoch', y='Distance'):
     """Reduce a bunch of runs to a mean and ci"""
@@ -41,6 +41,7 @@ def smooth(df, ys, window=10):
 
 
 def plot_llm():
+    csv_path = "plots/llm2.csv"
     def process_llm_run(run):
         df = pd.DataFrame(run.scan_history())
         df['run_name'] = run.name
@@ -50,7 +51,7 @@ def plot_llm():
 
     if not os.path.exists(csv_path):
         api = wandb.Api(timeout=90)
-        project = api.runs("morlmarl-llm")
+        project = api.runs("morlmarl-llm2")
         pool = ThreadPool(100)
         runs = [run for run in project]
         result = tqdm.tqdm(pool.imap_unordered(process_llm_run, runs), total=len(runs))
@@ -64,12 +65,12 @@ def plot_llm():
 
     # Sometimes wandb will return duplicates, no clue why...
     df = df.drop_duplicates().reset_index(drop=True)
-    df['Validation Loss'] = df.groupby('run_name')['eval_loss'].transform(
+    df['Test Distance to Goal (m)'] = df.groupby('run_name')['eval_loss'].transform(
         lambda x: x.rolling(window=50, min_periods=1).mean()
     )
     df = df.rename(columns={"epoch": "Epoch", "run_name": "LLM"})
-    fig = plt.figure(figsize=(7, 3))
-    g = sns.lineplot(data=df, x='Epoch', y='Validation Loss', hue='LLM', errorbar=None)
+    fig = plt.figure(figsize=(10, 5))
+    g = sns.lineplot(data=df, x='Epoch', y='Test Distance to Goal (m)', hue='LLM', errorbar=None)
     g.set_yscale("log")
     sns.move_legend(g, "upper left", bbox_to_anchor=(1, 1))
     plt.tight_layout()
@@ -130,13 +131,16 @@ def plot_loss_fn():
     weighted = groups.get_group(('weighted',)).sort_values('Tau')
     plt.figure()
     ax = sns.lineplot(weighted, x='Train Epoch', y='Distance', hue='Tau')
-    ax.set_title('Soft Q Distance to Target')
+    ax.set_title('Soft Q Test Distance to Goal (m)')
     ax.set_ylim(-0.1, 2.0)
+    ax.legend(loc="upper left", ncol=2)
+    plt.tight_layout()
     plt.savefig("plots/sim_weighted_distance.pdf")
     plt.figure()
     ax = sns.lineplot(weighted, x='Train Epoch', y='Collisions per Timestep', hue='Tau')
     ax.set_ylim(-0.2, 5)
     ax.set_title('Soft Q Number of Collisions per Timestep')
+    plt.tight_layout()
     plt.savefig("plots/sim_weighted_collision.pdf")
 
     cql = groups.get_group(('cql',))
@@ -144,13 +148,15 @@ def plot_loss_fn():
     plt.figure()
     ax = sns.lineplot(cql, x='Train Epoch', y='Distance', hue='Alpha')
     ax.legend(loc='lower right',ncol=2)
-    ax.set_title('CQL Distance to Target')
+    ax.set_title('CQL Test Distance to Goal (m)')
     ax.set_ylim(-0.1, 2.0)
+    plt.tight_layout()
     plt.savefig("plots/sim_cql_distance.pdf")
     plt.figure()
     ax = sns.lineplot(cql, x='Train Epoch', y='Collisions per Timestep', hue='Alpha')
     ax.set_title('CQL Number of Collisions per Timestep')
     ax.set_ylim(-0.2, 5)
+    plt.tight_layout()
     plt.savefig("plots/sim_cql_collision.pdf")
 
     # Now plot the best cql and weighted against mean/max
@@ -164,18 +170,20 @@ def plot_loss_fn():
     best_df = best_df.replace({'meanq': 'Mean Q', 'maxq': 'Max Q', 'cql': 'CQL', 'weighted': 'Soft Q'})
     plt.figure()
     ax = sns.lineplot(best_df, x='Train Epoch', y='Distance', hue='Loss')
-    ax.set_title('Distance to Target')
+    ax.set_title('Test Distance to Goal (m)')
     ax.set_ylim(-0.1, 2.0)
+    plt.tight_layout()
+    ax.legend(loc='upper left', ncol=2)
     plt.savefig("plots/sim_distance.pdf")
 
     plt.figure()
     ax = sns.lineplot(best_df, x='Train Epoch', y='Collisions per Timestep', hue='Loss')
     ax.set_title('Number of Collisions')
     ax.set_ylim(-0.2, 5)
+    plt.tight_layout()
     plt.savefig("plots/sim_collision.pdf")
 
     plt.show()
-    breakpoint()
 
 def plot_data_ablate():
     ## Compare with less data
@@ -226,20 +234,22 @@ def plot_data_ablate():
     datasize = 90
     df = df.sort_values('Dataset Size (Mins)')
     df = df.replace({
-        'dataset-05.h5': str(datasize * 0.05),
-        'dataset-10.h5': str(datasize * 0.10),
-        'dataset-25.h5': str(datasize * 0.25),
-        'dataset-50.h5': str(datasize * 0.50),
-        'dataset-75.h5': str(datasize * 0.75),
-        'dataset.h5': str(datasize)
+        'dataset-05.h5': str(int(datasize * 0.05)) + ' mins',
+        'dataset-10.h5': str(int(datasize * 0.10)) + ' mins',
+        'dataset-25.h5': str(int(datasize * 0.25)) + ' mins',
+        'dataset-50.h5': str(int(datasize * 0.50)) + ' mins',
+        'dataset-75.h5': str(int(datasize * 0.75)) + ' mins',
+        'dataset.h5': str(int(datasize)) + ' mins'
     })
     groups = df.groupby(['Loss'])
     #weighted = groups.get_group(('weighted',)).sort_values('Dataset Size (Mins)').reset_index()
     mean = groups.get_group(('meanq',))
     plt.figure()
     ax = sns.lineplot(mean, x='Train Epoch', y='Distance', hue='Dataset Size (Mins)')
-    ax.set_title('Distance to Target')
+    ax.set_title('Test Distance to Goal (m)')
     ax.set_ylim(-0.1, 2.0)
+    ax.legend(ncol=2)
+    plt.tight_layout()
     plt.savefig("plots/data_distance.pdf")
     plt.show()
 
@@ -247,22 +257,74 @@ def plot_data_ablate():
     ax = sns.lineplot(mean, x='Train Epoch', y='Collisions per Timestep', hue='Dataset Size (Mins)')
     ax.set_title('Number of Collisions')
     ax.set_ylim(-0.2, 5)
+    plt.tight_layout()
     plt.savefig("plots/data_collision.pdf")
     plt.show()
 
 
 def plot_real():
-    soft_train = pd.read_csv("data/real_csv/robomaster_eval_1716209490.csv")
-    dists = soft_train.groupby('robot_idx').apply(
-        # Compute the distance between the state and goal per robot
-        lambda x: np.maximum(0, np.linalg.norm(x[['state.pn', 'state.pe']].values - x[['goals.pn', 'goals.pe']].values, axis=-1) - 0.3)
-    )
-    # Now compute mean over all agents, for each timestep
-    dists = dists.mean()
-    print(dists)
-    pos = np.stack([soft_train['state.pn'], soft_train['state.pe']], axis=-1)
-    goal = np.stack([soft_train['goals.pn'], soft_train['goals.pe']], axis=-1)
-    breakpoint()
+    #soft_train = pd.read_csv("data/real_csv/robomaster_eval_1716209490.csv")
+    csv_path = "/Users/smorad/code/corl_2024/processed_rosbags/"
+    for trial, title, title2 in [
+        ("soft_2_0", 'Soft Q Real World Distance (3 Agents)', "Soft Q Real World Collisions (3 Agents)"),
+        ("mean", "Mean Q Real World Distance (3 Agents)", "Mean Q Real World Collisions (3 Agents)"),
+        ("max", "Max Q Real World Distance (3 Agents)", "Max Q Real World Collisions (3 Agents)"),
+        ("cql", "CQL Real World Distance (3 Agents)", "CQL Q Real World Collisions (3 Agents)"),
+        ("5agent_soft_2_0", 'Soft Q Real World Distance (5 Agents)', "Soft Q Real World Collisions (5 Agents)"),
+    ]:
+        train_dists = [
+            np.maximum(0, pd.read_csv(csv_path + trial + f"_train/robomaster_{i}/dist_to_goal/float.csv")['float'][:-1] - 0.3) for i in [1, 2, 3]
+        ]
+        mean_train_dists = np.mean(train_dists, axis=0)
+        eval_dists = [
+            np.maximum(0, pd.read_csv(csv_path + trial + f"_eval/robomaster_{i}/dist_to_goal/float.csv")['float'][:-1] - 0.3) for i in [1, 2, 3]
+        ]
+        mean_eval_dists = np.mean(eval_dists, axis=0)
+        plt.figure()
+        ax = sns.lineplot(x=np.arange(len(mean_train_dists)), y=mean_train_dists, label='Train')
+        ax = sns.lineplot(x=np.arange(len(mean_eval_dists)), y=mean_eval_dists, label='Test')
+        ax.legend(loc="upper left", ncol=2)
+        ax.set_ylim(-0.1, 3.0)
+        ax.set_xlabel('Time (s)')
+        ax.set_ylabel('Test Distance to Goal (m)')
+        if len(mean_train_dists) > 300:
+            ax.set_xticks(np.arange(0, len(mean_train_dists) + 1, 60))
+        else:
+            ax.set_xticks(np.arange(0, len(mean_train_dists) + 1, 30))
+        ax.set_title(title)
+        plt.tight_layout()
+        plt.savefig(f'plots/real_world_{trial}.pdf')
+
+        # Collisions
+        train_states = [
+            pd.read_csv(csv_path + trial + f"_train/robomaster_{i}/current_state/pos.csv") for i in [1, 2, 3]
+        ]
+        eval_states = [
+            pd.read_csv(csv_path + trial + f"_eval/robomaster_{i}/current_state/pos.csv") for i in [1, 2, 3]
+        ]
+        plt.figure()
+        for name, state in {"Train": train_states, "Test": eval_states}.items():
+            common_times = np.sort(np.concatenate([df['t_msg'] for df in state]))
+            state = [df.set_index('t_msg').reindex(common_times).interpolate(method='nearest', limit_direction='both').reset_index() for df in state]
+            pos = np.array([[s['x'], s['y']] for s in state]).transpose(2, 0, 1)
+            dist = np.linalg.norm(pos[:, :, None] - pos[:, None], axis=-1)
+            # Set self dist to zero
+            for i in range(len(state)):
+                dist[:, i, i] = np.inf
+            dist = dist.min(axis=(1,2))
+            common_times = (common_times - common_times[0]) / 1e9 # To relative seconds
+            ax = sns.lineplot(x=common_times, y=dist, label=name)
+        ax.set_ylim(0, 3.0)
+        ax.set_title(title2)
+        ax.set_ylabel('Minimum Distance (m)')
+        ax.set_xlabel('Time (s)')
+        ax.hlines(0.3, 0, common_times[-1], linestyles='dashed', color='red')
+        plt.tight_layout()
+        plt.savefig(f'plots/real_world_collision_{trial}.pdf')
+
+    plt.legend(loc='upper left', ncol=2)
+
+    plt.show()
 
 
 
