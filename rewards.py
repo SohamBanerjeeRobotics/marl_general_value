@@ -42,70 +42,6 @@ import numpy as np
 from numpy.linalg import norm
 
 
-def segment_intersect(p1, p2, p3, p4):
-    x1,y1 = p1
-    x2,y2 = p2
-    x3,y3 = p3
-    x4,y4 = p4
-    denom = (y4-y3)*(x2-x1) - (x4-x3)*(y2-y1)
-    denom = jnp.sign(denom) * jnp.maximum(jnp.abs(denom), 1e-6)
-    ua = ((x4-x3)*(y1-y3) - (y4-y3)*(x1-x3)) / denom
-    ub = ((x2-x1)*(y1-y3) - (y2-y1)*(x1-x3)) / denom
-
-
-
-    def ccw(ax, ay, bx, by, cx, cy):
-        return (cy-ay)*(B.x-A.x) > (B.y-A.y)*(C.x-A.x)
-
-    
-    breakpoint()
-
-    return jax.lax.cond(
-        (denom == 0) | (ua < 0) | (ua > 1) | (ub < 0) | (ub > 1),
-        lambda: jnp.array(jnp.inf),
-        lambda: jnp.array(0.0),
-    )
-
-def point_distance_to_segment(a, b, c):
-    # line segment ab and point is c
-    ab = b - a
-    bc = c - b
-    ac = c - a
-
-    ab_bc = jnp.dot(ab, bc)
-    ab_ac = jnp.dot(ab, ac)
-
-    ab_bc_dist = jnp.linalg.norm(c - b)
-    ab_ac_dist = jnp.linalg.norm(c - a)
-
-    mod = jnp.clip(jnp.linalg.norm(ab), 1e-6)
-    perp_dist = jnp.abs(ab[0] * ac[1] - ab[1] * ac[0]) / mod
-
-    dist = jax.lax.cond(
-        (ab_bc > 0) | (ab_ac < 0),
-        lambda: jax.lax.cond(
-            ab_bc > 0,
-            lambda: ab_bc_dist,
-            lambda: ab_ac_dist
-        ),
-        lambda: perp_dist
-    )
-    return dist
-
-
-def segment_distance(start1, end1, start2, end2):
-    # Check if line segments intersection, then distance is 0
-    # Otherwise, the closest point must be one of the line endpoints
-    intersect_dist = segment_intersect(start1, end1, start2, end2)
-    d0 = point_distance_to_segment(start1, end1, start2)
-    d1 = point_distance_to_segment(start1, end1, end2)
-    d2 = point_distance_to_segment(start2, end2, start1)
-    d3 = point_distance_to_segment(start2, end2, end1)
-    dist = jnp.min(jnp.stack([intersect_dist, d0, d1, d2, d3]))
-    breakpoint()
-    return dist
-
-
 def segment_distance_dumb(start1, end1, start2, end2):
     l0 = jnp.stack([
         jnp.linspace(start1[0], end1[0], 50),
@@ -220,7 +156,6 @@ def segment_collision(state, next_state, radius):
     collisions = (dists < radius).sum(-1) - 1.0
     return collisions
     
-     
 def ma_collision_reward_and_done(state, next_state, reward, done):
     collisions = jnp.expand_dims(segment_collision(state, next_state, ROBOT_DIAMETER), 1)
     # TODO: We need to draw lines and see if the lines intersect
