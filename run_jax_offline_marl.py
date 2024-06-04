@@ -1,5 +1,4 @@
 import argparse
-from dynamics_model import StateTransitionModel
 from evaluate_policy import evaluate_ma_policy, MARLEnv
 import jax
 import jax.numpy as jnp
@@ -12,9 +11,9 @@ import wandb
 import yaml
 import os
 
-from modules import GeneralMAQNetwork, GeneralQNetwork, greedy_policy
-from losses import update_general_qnet, update_general_qnet_ma
-from tasks import add_rewards_to_dataset, make_language_navigation_tasks
+from modules import GeneralMAQNetwork
+from losses import update_general_qnet_ma
+from tasks import make_language_navigation_tasks
 from rewards import ma_collision_reward_and_done
 
 
@@ -46,7 +45,6 @@ lr_warmup = optax.linear_schedule(config["lr"] * 0.01, config["lr"], config["war
 lr_train = optax.constant_schedule(config["lr"])
 lr_schedule = optax.join_schedules([lr_warmup, lr_train], [config["warmup_epochs"]])
 opt = optax.chain(
-    #optax.clip_by_global_norm(config["train"]["gradient_scale"]),
     optax.adamw(lr_schedule, weight_decay=config["weight_decay"]),
 )
 
@@ -66,7 +64,6 @@ q_target = GeneralMAQNetwork(
 )
 opt_state = opt.init(eqx.filter(q_function, eqx.is_inexact_array))
 
-#dataset_with_str = h5py.File("dataset.h5", "r")
 dataset_with_str = h5py.File(config['dataset'], "r")
 dataset = {k: jnp.array(v) for k,v in dataset_with_str.items() if k != 'task_string'} 
 data_size = dataset['next_reward'].shape[0]

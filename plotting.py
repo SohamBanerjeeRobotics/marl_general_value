@@ -1,5 +1,4 @@
 from multiprocessing.pool import ThreadPool
-import plotly.express as px
 import wandb
 import tqdm
 import pandas as pd
@@ -10,7 +9,6 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
-px.defaults.template = "seaborn"
 sns.set_theme()
 sns.set_context("talk")
 

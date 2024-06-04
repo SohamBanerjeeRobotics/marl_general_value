@@ -10,9 +10,6 @@ import math
 def leaky_relu(x, key=None):
     return jax.nn.leaky_relu(x)
 
-def gelu(x, key=None):
-    return jax.nn.gelu(x)
-
 def default_init(key, linear, scale=1.0, zero_bias=False, fixed_bias=None):
     """Default init used in pytorch"""
     lim = math.sqrt(scale / linear.in_features)
@@ -118,28 +115,6 @@ class GeneralQNetwork(eqx.Module):
         return self.reduce(q, axis=0)
 
 
-class GraphLayer(eqx.Module):
-    W_root: nn.Linear
-    W_neighbor: nn.Linear
-
-    def __init__(self, input_size, output_size, key):
-        keys = random.split(key, 2)
-        self.W_root = Block(input_size, output_size, 0, key=keys[0])
-        self.W_neighbor = Block(input_size, output_size, 0, key=keys[1])
-
-    def conv(self, root, neighbors):
-        return self.W_root(root) + self.W_neighbor(neighbors)
-
-    def __call__(self, x):
-        # x should be of shape [Num_agents, S]
-        assert x.ndim == 2, "x dim: {}".format(x.shape)
-        num_agents = x.shape[0]
-        # Do not include self loops, as they are present in the root
-        # results in [ sum(1, 2), sum(0, 2), sum(0, 1) ]
-        neighbors = jnp.sum(x, axis=0) - x
-        return eqx.filter_vmap(self.conv)(x, neighbors)
-
-
 class SimpleGraphLayer(eqx.Module):
     W: nn.Linear
 
@@ -166,35 +141,9 @@ class SimpleGraphLayer(eqx.Module):
         return out
 
 
-class EdgeGraphLayer(eqx.Module):
-    W: nn.Linear
-
-    def __init__(self, input_size, output_size, key):
-        keys = random.split(key, 2)
-        self.W = Block(2 * input_size, output_size, 0, key=keys[0])
-
-    def conv(self, root, neighbors):
-        # [A, F]
-        diff_neighbors = neighbors - root
-        res = eqx.filter_vmap(self.W)(jnp.concatenate([root, diff_neighbors], axis=-1))
-        # Agg
-        return res
-
-
-    def __call__(self, x):
-        # x should be of shape [Num_agents, S]
-        assert x.ndim == 2, "x dim: {}".format(x.shape)
-        num_agents = x.shape[0]
-        x = jnp.expand_dims(x, 1)
-        roots = jnp.repeat(x, num_agents, axis=1)
-        neighbors = roots.transpose(1, 0, 2)
-        out = eqx.filter_vmap(self.conv)(roots, neighbors)
-        return out.sum(1)
-
-
 class GeneralMAQNetwork(eqx.Module):
     config: Dict[str, Any]
-    gnn: GraphLayer
+    gnn: SimpleGraphLayer
     q: eqx.Module
     debug: bool
 
@@ -207,7 +156,6 @@ class GeneralMAQNetwork(eqx.Module):
             self.gnn = None
             self.q = QHead(obs_size + task_size, config["head_size"], act_size, config["dropout"], keys[2])
         else:
-            #self.pre = Block(obs_size, config["mlp_size"], 0, keys[1])
             self.gnn = SimpleGraphLayer(obs_size + task_size, config["mlp_size"], keys[0])
             self.q = QHead(config["mlp_size"], config["head_size"], act_size, config["dropout"], keys[2])
 
