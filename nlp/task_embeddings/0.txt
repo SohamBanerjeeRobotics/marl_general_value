@@ -1,1 +1,0 @@
-You are a holonomic wheeled robot in a multirobot system. Navigate to the blue object.
