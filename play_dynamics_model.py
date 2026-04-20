@@ -1,4 +1,4 @@
-from dataset import ACTION_IDX
+from constants import ACTION_IDX
 from dynamics_model import StateTransitionModel
 import equinox as eqx
 import jax.numpy as jnp
