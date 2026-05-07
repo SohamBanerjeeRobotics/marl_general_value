@@ -21,3 +21,9 @@ Simply run `validate_llm.py` to rerun our experiment that evaluted the latent sp
 
 == Policy Evaluation
 See `evaluate_policy.py` for evaluating trained policies in simulation. In the real-world, the scripts `robomaster_control_*` are used for executing robomasters in the real world. In particular, `robomaster_control_nodes` contains the `ros2` nodes used for dataset collection and training.
+
+
+== New Additions
+Along with the files in the original, some other files have also been added, i.e. "available_tasks.py" to check available tasks, "evaluate_policy_hungarian.py" based "evaluate_policy.py", which in addition does task allocation. "test_2.py" gets the best trained model from the models folder generated after running the RL training script "run_jax_offline_marl.py" and "nlp_sim3.py" is another standalone file for simulation with live interactive commands. The other addtional files are not necessary.
+
+This repo is inpired by the paper (https://arxiv.org/pdf/2407.20164).
